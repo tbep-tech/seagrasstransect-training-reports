@@ -5,11 +5,14 @@ format:
     embed-resources: true
     logo: images/tarponlogo.png
     nav-buttons: [github]
-
+    css: styles.css
+  
 params:
   yr: yr
   grp: grp
   grpnoyr: grpnoyr
+  transect: transect
+  truvar: truvar
   
 execute:
   echo: false
@@ -18,30 +21,54 @@ execute:
 ---
 
 ```{r}
-
+source(here::here('R/funcs.R'))
 load(file = here::here('data/trndat.rda'))
 
 yr <- params$yr
 grp <- params$grp
 grpnoyr <- params$grpnoyr
+transect <- params$transect
+truvar <- data.frame(params$truvar)
 
-datyrgrp <- trndat |> 
-  dplyr::filter(yr == !!yr) |> 
-  dplyr::filter(grpact == !!grp)
+evalgrp <- evalgrp_fun(trndat, yr, grp, truvar)
 ```
 
 ## Row {height=30%}
 
 ```{r}
-head(datyrgrp)
+head(trndat)
 ```
 
 ## Row {height=70%}
 
 ### Column {.tabset}
 
-```{}
+```{r}
+#| title: !expr transect[1]
+evaltrn_fun(evalgrp, transect[1])
 ```
 
-```{}
+```{r}
+#| title: !expr transect[2]
+evaltrn_fun(evalgrp, transect[2])
+```
+
+```{r}
+#| title: !expr transect[3]
+evaltrn_fun(evalgrp, transect[3])
+```
+
+```{r}
+#| title: !expr transect[4]
+evaltrn_fun(evalgrp, transect[4])
+```
+
+```{r}
+#| title: !expr transect[5]
+evaltrn_fun(evalgrp, transect[5])
+```
+
+```{r}
+#| title: !expr transect[6]
+evaltrn_fun(evalgrp, transect[1])
 ```
