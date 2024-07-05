@@ -1,0 +1,47 @@
+--- 
+title: '`r paste(params$yr, "transect training report:", params$grpnoyr)`'
+format: 
+  dashboard:
+    embed-resources: true
+    logo: images/tarponlogo.png
+    nav-buttons: [github]
+
+params:
+  yr: yr
+  grp: grp
+  grpnoyr: grpnoyr
+  
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r}
+
+load(file = here::here('data/trndat.rda'))
+
+yr <- params$yr
+grp <- params$grp
+grpnoyr <- params$grpnoyr
+
+datyrgrp <- trndat |> 
+  dplyr::filter(yr == !!yr) |> 
+  dplyr::filter(grpact == !!grp)
+```
+
+## Row {height=30%}
+
+```{r}
+head(datyrgrp)
+```
+
+## Row {height=70%}
+
+### Column {.tabset}
+
+```{}
+```
+
+```{}
+```
