@@ -109,11 +109,13 @@ evalgrp_fun <- function(trndat, yr, grp, truvar){
     dplyr::mutate(
       `Abundance aveval` = factor(`Abundance aveval`, levels = abulev, labels = abulab),
       `Abundance truval` = factor(`Abundance truval`, levels = abulev, labels = abulab),
-      `Abundance diff` = abs(as.numeric(`Abundance aveval`) - as.numeric(`Abundance truval`)),
+      `Abundance diff` = as.numeric(`Abundance aveval`) - as.numeric(`Abundance truval`),
       `Abundance perdiff` = (`Abundance diff` / 8) * 100,
-      `Blade Length perdiff` = abs((`Blade Length aveval` - `Blade Length truval`) / `Blade Length truval` * 100),
-      `Short Shoot Density perdiff` = abs((`Short Shoot Density aveval` - `Short Shoot Density truval`) / `Short Shoot Density truval` * 100)
-    )
+      `Blade Length perdiff` = (`Blade Length aveval` - `Blade Length truval`) / `Blade Length truval` * 100,
+      `Short Shoot Density perdiff` = (`Short Shoot Density aveval` - `Short Shoot Density truval`) / `Short Shoot Density truval` * 100
+    ) |> 
+    dplyr::mutate_if(is.numeric, ~sprintf('%0.1f', .)) |> 
+    dplyr::mutate_if(is.character, ~ifelse(. == 'NA', NA_character_, .))
   
   return(out)
   
@@ -128,11 +130,74 @@ evaltrn_fun <- function(evalgrp, trn){
   
   trn <- gsub('Transect\\s', '', trn)
 
-  evaltrn <- evalgrp |> 
+  evalgrptrn <- evalgrp |> 
     dplyr::filter(Site == trn)
   
-  spp <- unique(evaltrn$Savspecies)
+  allspp <- evalgrptrn$Savspecies |> 
+    unique()
   
-  return(spp)
+  out <- list(
+    Halodule = NULL,
+    Thalassia = NULL,
+    Syringodium = NULL,
+    Halophila = NULL,
+    Ruppia = NULL
+  )
+  
+  if('Halodule' %in% allspp) out$Halodule <- evaltrnspp_fun(evalgrptrn, 'Halodule')
+  if('Thalassia' %in% allspp) out$Thalassia <- evaltrnspp_fun(evalgrptrn, 'Thalassia')
+  if('Syringodium' %in% allspp) out$Syringodium <- evaltrnspp_fun(evalgrptrn, 'Syringodium')
+  if('Halophila' %in% allspp) out$Halophila <- evaltrnspp_fun(evalgrptrn, 'Halophila')
+  if('Ruppia' %in% allspp) out$Ruppia <- evaltrnspp_fun(evalgrptrn, 'Ruppia')
+
+  # remove NULL from out
+  out <- out[!sapply(out, is.null)]
+  
+  return(out)
+  
+}
+
+#' Get species specific summaries for a transect
+#' 
+#' @param evalgrptrn data frame, group evaluation data for a transect
+#' @param spp character, species name
+evaltrnspp_fun <- function(evalgrptrn, spp = c('Halodule', 'Thalassia', 'Syringodium', 'Halophila', 'Ruppia')){
+  
+  spp <- match.arg(spp)
+  
+  flt <- evalgrptrn |> 
+    dplyr::filter(Savspecies == spp)
+  
+  out <- list(
+    abu = NULL,
+    bl = NULL, 
+    ssd = NULL
+  )
+    
+  abuave <- paste('Reported abundance:', flt$`Abundance aveval`)
+  abutru <- paste('Most common abundance:', flt$`Abundance truval`)
+  abudiff <- paste('Difference in abundance:', as.integer(flt$`Abundance diff`))
+  out$abu <- htmltools::span(paste(abuave, abutru, abudiff, sep = '<br>'))
+
+  if(!is.na(flt$`Blade Length aveval`)){
+    blave <- paste('Reported blade length:', flt$`Blade Length aveval`)
+    bltru <- paste('Mean blade length across groups:', flt$`Blade Length truval`)
+    bldiff <- paste('% diff:', flt$`Blade Length perdiff`)
+    out$bl <- htmltools::span(paste(blave, bltru, bldiff, sep = '<br>'))
+  }
+    
+  if(!is.na(flt$`Short Shoot Density aveval`)){
+    ssdave <- paste('Reported short shoot density:', flt$`Short Shoot Density aveval`)
+    ssdtru <- paste('Mean short shoot density across groups:', flt$`Short Shoot Density truval`)
+    ssddiff <- paste('% diff:', flt$`Short Shoot Density perdiff`)
+    out$ssd <- htmltools::span(paste(ssdave, ssdtru, ssddiff, sep = '<br>'))
+  }
+  
+  # remove NULL from out
+  out <- out[!sapply(out, is.null)]
+  
+  # out$abu <- value_box(title = spp, value = out$abu)
+  
+  return(out)
   
 }
