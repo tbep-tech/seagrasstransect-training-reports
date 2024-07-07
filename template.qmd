@@ -44,31 +44,6 @@ head(trndat)
 ### Column {.tabset}
 
 ```{r}
-#| title: !expr transect[1]
-evaltrn_fun(evalgrp, transect[1])
-```
-
-```{r}
-#| title: !expr transect[2]
-evaltrn_fun(evalgrp, transect[2])
-```
-
-```{r}
-#| title: !expr transect[3]
-evaltrn_fun(evalgrp, transect[3])
-```
-
-```{r}
-#| title: !expr transect[4]
-evaltrn_fun(evalgrp, transect[4])
-```
-
-```{r}
-#| title: !expr transect[5]
-evaltrn_fun(evalgrp, transect[5])
-```
-
-```{r}
-#| title: !expr transect[6]
-evaltrn_fun(evalgrp, transect[1])
+#| title: "By transect"
+evaltrntab_fun(evalgrp)
 ```

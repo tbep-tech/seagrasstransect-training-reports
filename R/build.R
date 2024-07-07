@@ -1,7 +1,6 @@
 library(tbeptools)
-library(here)
 
-source(here('R/funcs.R'))
+source(here::here('R/funcs.R'))
 
 # get training data, all years ----------------------------------------------------------------
 

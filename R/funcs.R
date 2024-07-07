@@ -21,13 +21,24 @@ proc_grp <- function(trndat, yr, quiet = F){
   grps <- datyr$grpact |> 
     unique()
   
+  abulev <- c('0', '0.1', '0.5', '1', '2', '3', '4', '5')
+  abulab <- c('no coverage', 'solitary', 'few', '<5%', '5-25%', '25-50%', '51-75%', '76-100%')
+  
   truvar <- datyr |> 
     tidyr::pivot_wider(names_from = var, values_from = aveval) |>
+    dplyr::mutate(
+      Abundance = factor(Abundance, levels = abulev), 
+      Abundance = as.numeric(Abundance)
+    ) |> 
     dplyr::summarise(
       Abundance = floor(median(Abundance, na.rm = T)),
       `Blade Length` = mean(`Blade Length`, na.rm = T),
       `Short Shoot Density` = mean(`Short Shoot Density`, na.rm = T), 
       .by = c(Site, Savspecies)
+    ) |> 
+    dplyr::mutate(
+      Abundance = factor(Abundance, levels = seq_along(abulev), labels = abulev),
+      Abundance = as.numeric(as.character(Abundance))
     ) |> 
     tidyr::pivot_longer(
       cols = -c(Site, Savspecies),
@@ -70,7 +81,7 @@ proc_grp <- function(trndat, yr, quiet = F){
     
     file.rename(
       from = outputfl,
-      to = here('docs', outputfl)
+      to = here::here('docs', outputfl)
     )
   }
   
@@ -94,7 +105,7 @@ evalgrp_fun <- function(trndat, yr, grp, truvar){
   abulab <- c('no coverage', 'solitary', 'few', '<5%', '5-25%', '25-50%', '51-75%', '76-100%')
 
   out <- datyrgrp |> 
-    dplyr::left_join(truvar, by = c('Site', 'Savspecies', 'var')) |> 
+    dplyr::full_join(truvar, by = c('Site', 'Savspecies', 'var')) |> 
     dplyr::filter(!(aveval == 0 & truval == 0)) |> 
     tidyr::pivot_longer(
       cols = c(aveval, truval),
@@ -121,82 +132,84 @@ evalgrp_fun <- function(trndat, yr, grp, truvar){
   
 }
 
-#' Get transect specific summaries
+#' Create a summary gt table for all transects and species
 #' 
 #' @param evalgrp data frame, group evaluation data
-#' @param trn character, transect name
-#' 
-evaltrn_fun <- function(evalgrp, trn){
+evaltrntab_fun <- function(evalgrp){
   
-  trn <- gsub('Transect\\s', '', trn)
+  totab <- evalgrp |> 
+    dplyr::select(Site, Species = Savspecies, abuaveval = `Abundance aveval`, 
+           abutruval = `Abundance truval`, blavenum = `Blade Length aveval`, 
+           bltrunum = `Blade Length truval`,
+           ssavenum = `Short Shoot Density aveval`, 
+           sstrunum = `Short Shoot Density truval`
+    ) |> 
+    dplyr::mutate(
+      Site = as.numeric(Site), 
+      abuavenum = as.numeric(abuaveval) - 1, 
+      abutrunum = as.numeric(abutruval) - 1,
+      blavenum = as.numeric(blavenum),
+      bltrunum = as.numeric(bltrunum),
+      ssavenum = as.numeric(ssavenum),
+      sstrunum = as.numeric(sstrunum),
+      `Abundance truval` = paste0('(', abutruval, ')'),
+      `Blade Length truval` = paste0('(', bltrunum, ')'),
+      `Short Shoot Density truval` = paste0('(', sstrunum, ')')
+    ) |> 
+    tidyr::unite('Abundance reported (most common)', abuaveval, `Abundance truval`, sep = '  ', remove = FALSE) |>
+    tidyr::unite('Blade Length reported (average)', blavenum, `Blade Length truval`, sep = ' ', remove = FALSE) |>
+    tidyr::unite('Short Shoot Density reported (average)', ssavenum, `Short Shoot Density truval`, sep = ' ', remove = FALSE) |>
+    dplyr::select(-abuaveval, -abutruval, -`Abundance truval`, -`Blade Length truval`, -`Short Shoot Density truval`) |> 
+    dplyr::mutate_all(~ ifelse(. == 'NA (NA)', '', .)) |> 
+    dplyr::mutate_at(c('Abundance reported (most common)', 'Blade Length reported (average)', 'Short Shoot Density reported (average)'), ~ gsub('^NA', '-', .)) |>
+    dplyr::arrange(Site, Species) |> 
+    dplyr::mutate(Site = paste('Transect', Site)) |> 
+    dplyr::group_by(Site)
 
-  evalgrptrn <- evalgrp |> 
-    dplyr::filter(Site == trn)
-  
-  allspp <- evalgrptrn$Savspecies |> 
-    unique()
-  
-  out <- list(
-    Halodule = NULL,
-    Thalassia = NULL,
-    Syringodium = NULL,
-    Halophila = NULL,
-    Ruppia = NULL
+  abubultxt <- paste0(
+    '<span style="color:#00806E;display:inline;">',
+    '<b>Reported</b>', 
+    '</span> and ',
+    '<span style="color:#004F7E;display:inline;">',
+    '<b>most common</b>',
+    '</span>'
   )
   
-  if('Halodule' %in% allspp) out$Halodule <- evaltrnspp_fun(evalgrptrn, 'Halodule')
-  if('Thalassia' %in% allspp) out$Thalassia <- evaltrnspp_fun(evalgrptrn, 'Thalassia')
-  if('Syringodium' %in% allspp) out$Syringodium <- evaltrnspp_fun(evalgrptrn, 'Syringodium')
-  if('Halophila' %in% allspp) out$Halophila <- evaltrnspp_fun(evalgrptrn, 'Halophila')
-  if('Ruppia' %in% allspp) out$Ruppia <- evaltrnspp_fun(evalgrptrn, 'Ruppia')
-
-  # remove NULL from out
-  out <- out[!sapply(out, is.null)]
-  
-  return(out)
-  
-}
-
-#' Get species specific summaries for a transect
-#' 
-#' @param evalgrptrn data frame, group evaluation data for a transect
-#' @param spp character, species name
-evaltrnspp_fun <- function(evalgrptrn, spp = c('Halodule', 'Thalassia', 'Syringodium', 'Halophila', 'Ruppia')){
-  
-  spp <- match.arg(spp)
-  
-  flt <- evalgrptrn |> 
-    dplyr::filter(Savspecies == spp)
-  
-  out <- list(
-    abu = NULL,
-    bl = NULL, 
-    ssd = NULL
+  bultxt <- paste0(
+    '<span style="color:#00806E;display:inline;">',
+    '<b>Reported</b>', 
+    '</span> and ',
+    '<span style="color:#004F7E;display:inline;">',
+    '<b>average</b>',
+    '</span>'
   )
-    
-  abuave <- paste('Reported abundance:', flt$`Abundance aveval`)
-  abutru <- paste('Most common abundance:', flt$`Abundance truval`)
-  abudiff <- paste('Difference in abundance:', as.integer(flt$`Abundance diff`))
-  out$abu <- htmltools::span(paste(abuave, abutru, abudiff, sep = '<br>'))
 
-  if(!is.na(flt$`Blade Length aveval`)){
-    blave <- paste('Reported blade length:', flt$`Blade Length aveval`)
-    bltru <- paste('Mean blade length across groups:', flt$`Blade Length truval`)
-    bldiff <- paste('% diff:', flt$`Blade Length perdiff`)
-    out$bl <- htmltools::span(paste(blave, bltru, bldiff, sep = '<br>'))
-  }
-    
-  if(!is.na(flt$`Short Shoot Density aveval`)){
-    ssdave <- paste('Reported short shoot density:', flt$`Short Shoot Density aveval`)
-    ssdtru <- paste('Mean short shoot density across groups:', flt$`Short Shoot Density truval`)
-    ssddiff <- paste('% diff:', flt$`Short Shoot Density perdiff`)
-    out$ssd <- htmltools::span(paste(ssdave, ssdtru, ssddiff, sep = '<br>'))
-  }
-  
-  # remove NULL from out
-  out <- out[!sapply(out, is.null)]
-  
-  # out$abu <- value_box(title = spp, value = out$abu)
+  out <- gt::gt(totab) |> 
+    gtExtras::gt_plt_bullet(column = abuavenum, target = abutrunum, 
+                  palette = c('#00806E', '#004F7E')) |> 
+    gtExtras::gt_plt_bullet(column = blavenum, target = bltrunum, 
+                  palette = c('#00806E', '#004F7E')) |> 
+    gtExtras::gt_plt_bullet(column = ssavenum, target = sstrunum,
+                  palette = c('#00806E', '#004F7E')) |>
+    gt::cols_label(
+      abuavenum = gt::html(abubultxt),
+      blavenum = gt::html(bultxt), 
+      ssavenum = gt::html(bultxt)
+    ) |> 
+    gt::tab_options(row_group.as_column = TRUE) |> 
+    gt::cols_move(
+      columns = abuavenum,
+      after = `Abundance reported (most common)`
+    ) |> 
+    gt::cols_move(
+      columns = blavenum,
+      after = `Blade Length reported (average)`
+    ) |>
+    gt::cols_move(
+      columns = ssavenum,
+      after = `Short Shoot Density reported (average)`
+    ) |> 
+    gt::cols_align('left')
   
   return(out)
   
