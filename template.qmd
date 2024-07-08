@@ -31,19 +31,30 @@ transect <- params$transect
 truvar <- data.frame(params$truvar)
 
 evalgrp <- evalgrp_fun(trndat, yr, grp, truvar)
+
+cards <- list(
+  card_fun(evalgrp, 'Abundance'), 
+  card_fun(evalgrp, 'Blade Length'), 
+  card_fun(evalgrp, 'Short Shoot Density')
+)
 ```
 
-## Row {height=30%}
-
-```{r}
-head(trndat)
-```
-
-## Row {height=70%}
+## Row {height=50%}
 
 ### Column {.tabset}
 
 ```{r}
-#| title: "By transect"
+#| title: "Overall summary"
+head(trndat)
+```
+
+```{r}
+#| title: "Detailed summary"
 evaltrntab_fun(evalgrp)
+```
+
+## Row {height=50%}
+
+```{r}
+bslib::layout_column_wrap(width = '250px', fill = F, cards[[1]], cards[[2]], cards[[3]])
 ```

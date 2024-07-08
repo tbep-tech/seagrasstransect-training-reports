@@ -31,7 +31,7 @@ proc_grp <- function(trndat, yr, quiet = F){
       Abundance = as.numeric(Abundance)
     ) |> 
     dplyr::summarise(
-      Abundance = floor(median(Abundance, na.rm = T)),
+      Abundance = round(mean(Abundance, na.rm = T), 0),
       `Blade Length` = mean(`Blade Length`, na.rm = T),
       `Short Shoot Density` = mean(`Short Shoot Density`, na.rm = T), 
       .by = c(Site, Savspecies)
@@ -119,11 +119,7 @@ evalgrp_fun <- function(trndat, yr, grp, truvar){
     ) |>
     dplyr::mutate(
       `Abundance aveval` = factor(`Abundance aveval`, levels = abulev, labels = abulab),
-      `Abundance truval` = factor(`Abundance truval`, levels = abulev, labels = abulab),
-      `Abundance diff` = as.numeric(`Abundance aveval`) - as.numeric(`Abundance truval`),
-      `Abundance perdiff` = (`Abundance diff` / 8) * 100,
-      `Blade Length perdiff` = (`Blade Length aveval` - `Blade Length truval`) / `Blade Length truval` * 100,
-      `Short Shoot Density perdiff` = (`Short Shoot Density aveval` - `Short Shoot Density truval`) / `Short Shoot Density truval` * 100
+      `Abundance truval` = factor(`Abundance truval`, levels = abulev, labels = abulab)
     ) |> 
     dplyr::mutate_if(is.numeric, ~sprintf('%0.1f', .)) |> 
     dplyr::mutate_if(is.character, ~ifelse(. == 'NA', NA_character_, .))
@@ -218,5 +214,240 @@ evaltrntab_fun <- function(evalgrp){
     gt::cols_align('left')
   
   return(out)
+  
+}
+
+#' Create summary of metrics across transects for each species
+#' 
+#' @param evalgrp Data frame of evaluation group
+#' @param vr Character vector of variable names
+sppdiff_fun <- function(evalgrp, vr = c('Abundance', 'Blade Length', 'Short Shoot Density')){
+  
+  vr <- match.arg(vr)
+  
+  out <- evalgrp |> 
+    dplyr::rename(
+      aveval = paste(vr, 'aveval'),
+      truval = paste(vr, 'truval')
+    ) 
+  
+  if(vr == 'Abundance'){
+
+    out <- out |> 
+      dplyr::select(
+        Savspecies, 
+        aveval,
+        truval
+      ) |> 
+      dplyr::mutate(across(-Savspecies, as.numeric)) |>
+      dplyr::summarise(
+        aveval = round(mean(aveval, na.rm = T), 0), 
+        truval = round(mean(truval, na.rm = T), 0),
+        .by = 'Savspecies'
+      ) |> 
+      dplyr::mutate(
+        avediff = aveval - truval
+      )
+    
+  } else {
+    
+    out <- out |> 
+      dplyr::select(Savspecies, aveval, truval) |> 
+      dplyr::mutate(across(-Savspecies, as.numeric)) |>
+      dplyr::summarise(
+        aveval = ifelse(all(aveval == 0 | is.na(aveval)), NA, mean(aveval, na.rm = T)),
+        truval = ifelse(all(truval == 0 | is.na(truval)), NA, mean(truval, na.rm = T)), 
+        .by = 'Savspecies'
+      ) |> 
+      dplyr::mutate(
+        avediff = aveval - truval
+      )
+    
+  }
+  
+  out <- out |> 
+    dplyr::mutate(dplyr::across(-Savspecies, \(x) round(x, 1))) |> 
+    dplyr::arrange(Savspecies)
+  
+  return(out)
+  
+}
+
+#' Create summary card for species metric
+#' 
+#' @param evalgrp data frame with evaluation group data
+#' @param vr character vector with variable name
+card_fun <- function(evalgrp, vr = c('Abundance', 'Blade Length', 'Short Shoot Density')){
+  
+  vr <- match.arg(vr)
+  
+  vruni <- c('Abundance' = 'mean BB categories away', 
+             'Blade Length' = 'cm difference on average',
+             'Short Shoot Density' = 'shoots per m<sup>2</sup> difference on average')
+  vruni <- vruni[[vr]]
+  
+  sppdiff <- sppdiff_fun(evalgrp, vr)
+  
+  if(vr == 'Abundance'){
+    
+    sumtxt <- sppdiff |> 
+      dplyr::summarise(
+        avediff = round(mean(avediff, na.rm = T), 0)
+      )
+    sgndff <- sign(sumtxt$avediff)
+    sgndff <- ifelse(sgndff == 0, '', ifelse(sgndff == 1, '+', '-'))
+    sumtxt <- paste(sgndff, sumtxt$avediff, ' ', vruni, ' across transects', sep = '')
+    sumtxt <- paste0('<span><b><i>All species</i/></b> ', sumtxt, '</span>')
+    
+    txtdsc <- dplyr::case_when(
+      sgndff == '' ~ 'Reported values are close to average, good job!',
+      sgndff == '+' ~ 'Reported values are generally higher than average',
+      sgndff == '' ~ 'Reported values are generally higher than average'
+    )
+    txtdsc <- paste0('<h3>', txtdsc, '</h3>')
+    
+    spptxt <- sppdiff |> 
+      dplyr::mutate(
+        sgndff = sign(avediff),
+        sgndff = dplyr::case_when(
+          is.na(sgndff) ~ '',
+          sgndff == 0 ~ '',
+          sgndff == 1 ~ '+',
+          sgndff == -1 ~ '' # already a negative prefix
+        ),
+        avediff = ifelse(is.na(avediff), 'not recorded', as.character(avediff)), 
+        avediff = dplyr::case_when(
+          avediff == 'not recorded' ~ avediff,
+          T ~ paste(sgndff, avediff, ' ', vruni, ' across transects', sep = '')
+        ),
+        Savspecies = paste0('<i><b>', Savspecies, '</b></i>')
+      ) |> 
+      tidyr::unite('Savspecies', Savspecies, avediff, sep = ' ') |>
+      dplyr::mutate(
+        Savspecies = paste0('<span>', Savspecies, '</span>')
+      ) |> 
+      dplyr::pull(Savspecies) |> 
+      paste0(collapse = '</p><p>')
+    spptxt <- paste0(sumtxt, '</p><p>', spptxt)
+    spptxt < paste0('<p>', spptxt, '</p>')
+
+    # create plotly barplot w/ lines
+    sppdiff <- sppdiff |> 
+      dplyr::filter(!is.na(avediff)) |> 
+      dplyr::mutate(
+        Savspecies = factor(Savspecies), 
+        Savnum = as.numeric(Savspecies)
+      )
+  
+    p <- plotly::plot_ly(
+        sppdiff,
+        x = ~ Savnum,
+        y = ~ aveval,
+        type = 'bar',
+        marker = list(color = '#00806E'), 
+        name = 'Reported value'
+      ) |> 
+      plotly::add_segments(
+        x = ~ Savnum - 0.4,
+        xend = ~ Savnum + 0.4,
+        y = ~ truval,
+        yend = ~ truval,
+        line = list(color = '#004F7E', width = 7), 
+        name = 'True value',
+        inherit = F
+      ) |>
+      plotly::layout(
+        xaxis = list(title = '', ticktext = levels(sppdiff$Savspecies), tickvals = sppdiff$Savnum),
+        yaxis = list(title = 'Average <span style="color:#00806E;display:inline;"><b>reported</b></span> vs <span style="color:#004F7E;display:inline;"><b>true</b></span>', tickvals = 0:7, ticktext = c('no coverage', 'solitary', 'few', '<5%', '5-25%', '25-50%', '51-75%', '76-100%')), 
+        showlegend = F
+      ) |> 
+      plotly::config(displayModeBar = F)    
+    
+  }
+  
+  if(vr != 'Abundance'){
+    
+    sumtxt <- sppdiff |> 
+      dplyr::summarise(
+        avediff = round(mean(avediff, na.rm = T), 1)
+      )
+    sgndff <- sign(sumtxt$avediff)
+    sgndff <- ifelse(sgndff == 0, '', ifelse(sgndff == 1, '+', '-'))
+    sumtxt <- paste(gsub('\\-', '', sgndff), sumtxt$avediff, ' ', vruni, ' across transects', sep = '')
+    sumtxt <- paste0('<span><b><i>All species</i></b> ', sumtxt, '</span>')
+    
+    txtdsc <- dplyr::case_when(
+      sgndff == '' ~ 'Reported values are close to average, good job!',
+      sgndff == '+' ~ 'Reported values are generally higher than average',
+      sgndff == '-' ~ 'Reported values are generally lower than average'
+    )
+    txtdsc <- paste0('<h3>', txtdsc, '</h3>')
+
+    spptxt <- sppdiff |> 
+      dplyr::mutate(
+        sgndff = sign(avediff),
+        sgndff = dplyr::case_when(
+          is.na(sgndff) ~ '',
+          sgndff == 0 ~ '',
+          sgndff == 1 ~ '+',
+          sgndff == -1 ~ '' # already a negative prefix
+        ),
+        avediff = ifelse(is.na(avediff), 'not recorded', as.character(avediff)), 
+        avediff = dplyr::case_when(
+          avediff == 'not recorded' ~ avediff,
+          T ~ paste(sgndff, avediff, ' ', vruni, ' across transects', sep = '')
+        ),
+        Savspecies = paste0('<i><b>', Savspecies, '</b></i>')
+      ) |> 
+      tidyr::unite('Savspecies', Savspecies, avediff, sep = ' ') |>
+      dplyr::mutate(
+        Savspecies = paste0('<span>', Savspecies, '</span>')
+      ) |> 
+      dplyr::pull(Savspecies) |> 
+      paste0(collapse = '</p><p>')
+    spptxt <- paste0(sumtxt, '</p><p>', spptxt)
+    spptxt < paste0('<p>', spptxt, '</p>')
+
+    # create plotly barplot w/ lines
+    sppdiff <- sppdiff |> 
+      dplyr::filter(!is.na(aveval)) |> 
+      dplyr::mutate(
+        Savspecies = factor(Savspecies), 
+        Savnum = as.numeric(Savspecies)
+      )
+    
+    p <- plotly::plot_ly(
+      sppdiff,
+      x = ~ Savnum,
+      y = ~ aveval,
+      type = 'bar',
+      marker = list(color = '#00806E'), 
+      name = 'Reported value'
+    ) |> 
+      plotly::add_segments(
+        x = ~ Savnum - 0.4,
+        xend = ~ Savnum + 0.4,
+        y = ~ truval,
+        yend = ~ truval,
+        line = list(color = '#004F7E', width = 7), 
+        name = 'True value',
+        inherit = F
+      ) |>
+      plotly::layout(
+        xaxis = list(title = '', ticktext = levels(sppdiff$Savspecies), tickvals = sppdiff$Savnum),
+        yaxis = list(title = 'Average <span style="color:#00806E;display:inline;"><b>reported</b></span> vs <span style="color:#004F7E;display:inline;"><b>true</b></span>'), 
+        showlegend = F
+      ) |> 
+      plotly::config(displayModeBar = F)    
+    
+  }
+  
+  bslib::value_box(
+    title = gt::html(paste0('<b>', vr, ' summary</b>')),
+    value = gt::html(txtdsc),
+    gt::html(spptxt), 
+    showcase = p,
+    showcase_layout = bslib::showcase_left_center(max_height = "300px", width = 0.4)
+  ) 
   
 }
