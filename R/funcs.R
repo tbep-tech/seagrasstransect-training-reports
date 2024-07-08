@@ -156,7 +156,7 @@ evaltrntab_fun <- function(evalgrp){
       `Blade Length truval` = paste0('(', bltrunum, ')'),
       `Short Shoot Density truval` = paste0('(', sstrunum, ')')
     ) |> 
-    tidyr::unite('Abundance reported (most common)', abuaveval, `Abundance truval`, sep = '  ', remove = FALSE) |>
+    tidyr::unite('Abundance reported (most common)', abuaveval, `Abundance truval`, sep = ' ', remove = FALSE) |>
     tidyr::unite('Blade Length reported (average)', blavenum, `Blade Length truval`, sep = ' ', remove = FALSE) |>
     tidyr::unite('Short Shoot Density reported (average)', ssavenum, `Short Shoot Density truval`, sep = ' ', remove = FALSE) |>
     dplyr::select(-abuaveval, -abutruval, -`Abundance truval`, -`Blade Length truval`, -`Short Shoot Density truval`) |> 
@@ -166,23 +166,11 @@ evaltrntab_fun <- function(evalgrp){
     dplyr::mutate(Site = paste('Transect', Site)) |> 
     dplyr::group_by(Site)
 
-  abubultxt <- paste0(
-    '<span style="color:#00806E;display:inline;">',
-    '<b>Reported</b>', 
-    '</span> and ',
-    '<span style="color:#004F7E;display:inline;">',
-    '<b>most common</b>',
-    '</span>'
-  )
+  abubultxt <- '<span style="color:#00806E;display:inline;"><b>Abundance reported</b></span> <span style="color:#004F7E;display:inline;"><b>(most common)</b></span>'
   
-  bultxt <- paste0(
-    '<span style="color:#00806E;display:inline;">',
-    '<b>Reported</b>', 
-    '</span> and ',
-    '<span style="color:#004F7E;display:inline;">',
-    '<b>average</b>',
-    '</span>'
-  )
+  blbultxt <- '<span style="color:#00806E;display:inline;"><b>Blade length reported</b></span> <span style="color:#004F7E;display:inline;"><b>(average)</b></span>'
+
+  ssbultxt <- '<span style="color:#00806E;display:inline;"><b>Short shoot density reported</b></span> <span style="color:#004F7E;display:inline;"><b>(average)</b></span>'
 
   out <- gt::gt(totab) |> 
     gtExtras::gt_plt_bullet(column = abuavenum, target = abutrunum, 
@@ -192,11 +180,29 @@ evaltrntab_fun <- function(evalgrp){
     gtExtras::gt_plt_bullet(column = ssavenum, target = sstrunum,
                   palette = c('#00806E', '#004F7E')) |>
     gt::cols_label(
-      abuavenum = gt::html(abubultxt),
-      blavenum = gt::html(bultxt), 
-      ssavenum = gt::html(bultxt)
+      `Abundance reported (most common)`= gt::html(abubultxt),
+      `Blade Length reported (average)` = gt::html(blbultxt), 
+      `Short Shoot Density reported (average)` = gt::html(ssbultxt),
+      abuavenum = '',
+      blavenum = '',
+      ssavenum = ''
     ) |> 
+    gt::tab_style(
+      style = gt::cell_text(style = "italic"),
+      locations = gt::cells_body(
+        columns = 'Species'
+      )
+    ) |>
     gt::tab_options(row_group.as_column = TRUE) |> 
+    gt::text_transform(
+      locations = gt::cells_body(
+        columns = c(`Abundance reported (most common)`, `Blade Length reported (average)`, `Short Shoot Density reported (average)`)
+      ),
+      fn = function(x) {
+        x <- gsub('^(.*)\\s(.*)$', '<span style="color:#00806E;display:inline;"><b>\\1</b></span> <span style="color:#004F7E";display:inline;"><b>\\2</b></span>', x)
+        x
+      }
+    ) |>
     gt::cols_move(
       columns = abuavenum,
       after = `Abundance reported (most common)`
