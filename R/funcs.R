@@ -21,30 +21,7 @@ proc_grp <- function(trndat, yr, quiet = F){
   grps <- datyr$grpact |> 
     unique()
   
-  abulev <- c('0', '0.1', '0.5', '1', '2', '3', '4', '5')
-  abulab <- c('no coverage', 'solitary', 'few', '<5%', '5-25%', '25-50%', '51-75%', '76-100%')
-  
-  truvar <- datyr |> 
-    tidyr::pivot_wider(names_from = var, values_from = aveval) |>
-    dplyr::mutate(
-      Abundance = factor(Abundance, levels = abulev), 
-      Abundance = as.numeric(Abundance)
-    ) |> 
-    dplyr::summarise(
-      Abundance = round(mean(Abundance, na.rm = T), 0),
-      `Blade Length` = mean(`Blade Length`, na.rm = T),
-      `Short Shoot Density` = mean(`Short Shoot Density`, na.rm = T), 
-      .by = c(Site, Savspecies)
-    ) |> 
-    dplyr::mutate(
-      Abundance = factor(Abundance, levels = seq_along(abulev), labels = abulev),
-      Abundance = as.numeric(as.character(Abundance))
-    ) |> 
-    tidyr::pivot_longer(
-      cols = -c(Site, Savspecies),
-      names_to = 'var',
-      values_to = 'truval'
-    ) 
+  truvar <- truvar_fun(trndat, yr)
   
   for(grp in grps){
     
@@ -84,6 +61,42 @@ proc_grp <- function(trndat, yr, quiet = F){
       to = here::here('docs', outputfl)
     )
   }
+  
+}
+
+#' Get "true" values from training data for a given year
+#' 
+#' @param trndat data frame, training data
+#' @param yr integer, year
+truvar_fun <- function(trndat, yr){
+  
+  abulev <- c('0', '0.1', '0.5', '1', '2', '3', '4', '5')
+  abulab <- c('no coverage', 'solitary', 'few', '<5%', '5-25%', '25-50%', '51-75%', '76-100%')
+  
+  out <- trndat |> 
+    dplyr::filter(yr == !!yr) |>
+    tidyr::pivot_wider(names_from = var, values_from = aveval) |>
+    dplyr::mutate(
+      Abundance = factor(Abundance, levels = abulev), 
+      Abundance = as.numeric(Abundance)
+    ) |> 
+    dplyr::summarise(
+      Abundance = round(mean(Abundance, na.rm = T), 0),
+      `Blade Length` = mean(`Blade Length`, na.rm = T),
+      `Short Shoot Density` = mean(`Short Shoot Density`, na.rm = T), 
+      .by = c(Site, Savspecies)
+    ) |> 
+    dplyr::mutate(
+      Abundance = factor(Abundance, levels = seq_along(abulev), labels = abulev),
+      Abundance = as.numeric(as.character(Abundance))
+    ) |> 
+    tidyr::pivot_longer(
+      cols = -c(Site, Savspecies),
+      names_to = 'var',
+      values_to = 'truval'
+    ) 
+  
+  return(out)
   
 }
 
