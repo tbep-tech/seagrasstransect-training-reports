@@ -13,6 +13,7 @@ params:
   grpnoyr: grpnoyr
   transect: transect
   truvar: truvar
+  grpscr: grpscr
   
 execute:
   echo: false
@@ -29,13 +30,14 @@ grp <- params$grp
 grpnoyr <- params$grpnoyr
 transect <- params$transect
 truvar <- data.frame(params$truvar)
+grpscr <- params$grpscr # do not make a data frame because names will be different
 
 evalgrp <- evalgrp_fun(trndat, yr, grp, truvar)
 
 cards <- list(
-  card_fun(evalgrp, 'Abundance'), 
-  card_fun(evalgrp, 'Blade Length'), 
-  card_fun(evalgrp, 'Short Shoot Density')
+  card_fun(evalgrp, grpscr, 'Abundance'), 
+  card_fun(evalgrp, grpscr, 'Blade Length'), 
+  card_fun(evalgrp, grpscr, 'Short Shoot Density')
 )
 ```
 

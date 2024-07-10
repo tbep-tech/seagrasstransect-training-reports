@@ -21,7 +21,11 @@ proc_grp <- function(trndat, yr, quiet = F){
   grps <- datyr$grpact |> 
     unique()
   
+  # "true" scores as average
   truvar <- truvar_fun(trndat, yr)
+  
+  # group report card
+  allgrpscr <- allgrpscr_fun(trndat, yr, truvar)
   
   for(grp in grps){
     
@@ -31,13 +35,18 @@ proc_grp <- function(trndat, yr, quiet = F){
     
     grpnoyr <- gsub('^\\d{4}:\\s', '', grp)
     
+    grpscr <- allgrpscr |> 
+      dplyr::filter(grpact == !!grp) |>
+      dplyr::select(-grpact)
+    
     # define parameters
     params <- list(
       yr = yr, 
       grp = grp,
       grpnoyr = grpnoyr,
       transect = transect,
-      truvar = truvar
+      truvar = truvar,
+      grpscr = grpscr
     )
 
     outputfl <- trndat |> 
@@ -289,8 +298,9 @@ sppdiff_fun <- function(evalgrp, vr = c('Abundance', 'Blade Length', 'Short Shoo
 #' Create summary card for species metric
 #' 
 #' @param evalgrp data frame with evaluation group data
+#' @param grpscr data frame with group score data
 #' @param vr character vector with variable name
-card_fun <- function(evalgrp, vr = c('Abundance', 'Blade Length', 'Short Shoot Density')){
+card_fun <- function(evalgrp, grpscr, vr = c('Abundance', 'Blade Length', 'Short Shoot Density')){
   
   vr <- match.arg(vr)
   
@@ -300,9 +310,11 @@ card_fun <- function(evalgrp, vr = c('Abundance', 'Blade Length', 'Short Shoot D
   vruni <- vruni[[vr]]
   
   sppdiff <- sppdiff_fun(evalgrp, vr)
+
+  scr <- as.character(grpscr[[vr]])
   
   if(vr == 'Abundance'){
-    
+
     sumtxt <- sppdiff |> 
       dplyr::summarise(
         avediff = round(mean(avediff, na.rm = T), 0)
@@ -311,13 +323,12 @@ card_fun <- function(evalgrp, vr = c('Abundance', 'Blade Length', 'Short Shoot D
     sgndff <- ifelse(sgndff == 0, '', ifelse(sgndff == 1, '+', '-'))
     sumtxt <- paste(sgndff, sumtxt$avediff, ' ', vruni, ' across transects', sep = '')
     sumtxt <- paste0('<span><b><i>All species</i/></b> ', sumtxt, '</span>')
-    
+  
     txtdsc <- dplyr::case_when(
-      sgndff == '' ~ 'Reported values are close to average, good job!',
-      sgndff == '+' ~ 'Reported values are generally higher than average',
-      sgndff == '' ~ 'Reported values are generally higher than average'
+      sgndff == '' ~ 'reported values are close to average, good job!',
+      sgndff == '+' ~ 'reported values are generally higher than average',
+      sgndff == '-' ~ 'reported values are generally lower than average'
     )
-    txtdsc <- paste0('<h3>', txtdsc, '</h3>')
     
     spptxt <- sppdiff |> 
       dplyr::mutate(
@@ -388,13 +399,12 @@ card_fun <- function(evalgrp, vr = c('Abundance', 'Blade Length', 'Short Shoot D
     sgndff <- ifelse(sgndff == 0, '', ifelse(sgndff == 1, '+', '-'))
     sumtxt <- paste(gsub('\\-', '', sgndff), sumtxt$avediff, ' ', vruni, ' across transects', sep = '')
     sumtxt <- paste0('<span><b><i>All species</i></b> ', sumtxt, '</span>')
-    
+
     txtdsc <- dplyr::case_when(
-      sgndff == '' ~ 'Reported values are close to average, good job!',
-      sgndff == '+' ~ 'Reported values are generally higher than average',
-      sgndff == '-' ~ 'Reported values are generally lower than average'
+      sgndff == '' ~ 'reported values are close to average, good job!',
+      sgndff == '+' ~ 'reported values are generally higher than average',
+      sgndff == '-' ~ 'reported values are generally lower than average'
     )
-    txtdsc <- paste0('<h3>', txtdsc, '</h3>')
 
     spptxt <- sppdiff |> 
       dplyr::mutate(
@@ -428,7 +438,7 @@ card_fun <- function(evalgrp, vr = c('Abundance', 'Blade Length', 'Short Shoot D
         Savspecies = factor(Savspecies), 
         Savnum = as.numeric(Savspecies)
       )
-    
+
     p <- plotly::plot_ly(
       sppdiff,
       x = ~ Savnum,
@@ -454,6 +464,8 @@ card_fun <- function(evalgrp, vr = c('Abundance', 'Blade Length', 'Short Shoot D
       plotly::config(displayModeBar = F)    
     
   }
+  
+  txtdsc <- paste0('<span><h3><b>', scr, '</b></h3><h4> ', txtdsc, '</h4></span>')
   
   bslib::value_box(
     title = gt::html(paste0('<b>', vr, ' summary</b>')),
@@ -492,9 +504,9 @@ grpscr_fun <- function(evalgrp){
       dplyr::across(`Blade Length perdiff`:`Abundance perdiff`, ~ mean(.x, na.rm = T))
     ) |> 
     dplyr::rename(
-      `Blade Length scr` = `Blade Length perdiff`,
-      `Short Shoot Density scr` = `Short Shoot Density perdiff`,
-      `Abundance scr` = `Abundance perdiff`
+      `Blade Length` = `Blade Length perdiff`,
+      `Short Shoot Density` = `Short Shoot Density perdiff`,
+      `Abundance` = `Abundance perdiff`
     )
   
   return(out)
@@ -520,16 +532,16 @@ allgrpscr_fun <- function(trndat, yr, truvar){
     dplyr::select(-evalgrp) |> 
     tidyr::unnest(scrs) |>
     dplyr::mutate(
-      dplyr::across(`Blade Length scr`:`Abundance scr`, ~ scales::rescale(.x, to = c(100, 65))),
-      `Total scr` = (`Blade Length scr` + `Short Shoot Density scr` + `Abundance scr`) / 3
+      dplyr::across(`Blade Length`:`Abundance`, ~ scales::rescale(.x, to = c(100, 65))),
+      `Total` = (`Blade Length` + `Short Shoot Density` + `Abundance`) / 3
     )
   
   grades <- c('A', 'A-', 'B+', 'B', 'B-', 'C+', 'C')
   grdbrk <- c(101, 95, 90, 85, 80, 75, 70, 0)
 
-  our <- scrs |> 
+  out <- scrs |> 
     dplyr::mutate(
-      dplyr::across(`Blade Length scr`:`Total scr`, ~ cut(-.x, breaks = -grdbrk, labels = grades))
+      dplyr::across(`Blade Length`:`Total`, ~ cut(-.x, breaks = -grdbrk, labels = grades) |> as.character())
     )
 
   return(out)
