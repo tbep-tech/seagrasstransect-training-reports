@@ -464,3 +464,75 @@ card_fun <- function(evalgrp, vr = c('Abundance', 'Blade Length', 'Short Shoot D
   ) 
   
 }
+
+#' Calculate percent difference and scores by by metric for a group
+#' 
+#' @param evalgrp A data frame as returned by \code{\link{evalgrp_fun}}
+grpscr_fun <- function(evalgrp){
+  
+  perdiff <- evalgrp |> 
+    dplyr::mutate(
+      dplyr::across(`Blade Length aveval`:`Short Shoot Density truval`, as.numeric),
+      `Abundance diff` = as.numeric(`Abundance aveval`) - as.numeric(`Abundance truval`),
+      `Abundance perdiff` = (`Abundance diff` / 8) * 100,
+      `Blade Length perdiff` = (`Blade Length aveval` - `Blade Length truval`) / `Blade Length truval` * 100,
+      `Short Shoot Density perdiff` = (`Short Shoot Density aveval` - `Short Shoot Density truval`) / `Short Shoot Density truval` * 100
+    ) |> 
+    dplyr::select(Site, Savspecies, `Blade Length perdiff`, `Short Shoot Density perdiff`, `Abundance perdiff`)
+
+  out <- perdiff |> 
+    # dplyr::mutate(
+    #   dplyr::across(`Blade Length perdiff`:`Abundance perdiff`, ~ ifelse(abs(.x) > 10, 1, 0))
+    # ) |> 
+    dplyr::summarise(
+      dplyr::across(`Blade Length perdiff`:`Abundance perdiff`, ~ ifelse(all(is.na(.x)), NA, mean(abs(.x), na.rm = T))),
+      .by = Site
+    ) |> 
+    dplyr::summarise(
+      dplyr::across(`Blade Length perdiff`:`Abundance perdiff`, ~ mean(.x, na.rm = T))
+    ) |> 
+    dplyr::rename(
+      `Blade Length scr` = `Blade Length perdiff`,
+      `Short Shoot Density scr` = `Short Shoot Density perdiff`,
+      `Abundance scr` = `Abundance perdiff`
+    )
+  
+  return(out)
+  
+}
+
+#' Calculate scores for all groups based on distribution of scores
+#' 
+#' @param trndat data frame of all seagrass transect training data
+#' @param yr integer, year
+#' @param truvar data frame "true" values from training data for a given year
+allgrpscr_fun <- function(trndat, yr, truvar){
+  
+  scrs <- trndat |> 
+    dplyr::filter(yr == !!yr) |> 
+    dplyr::select(grpact) |> 
+    dplyr::distinct() |> 
+    dplyr::group_nest(grpact, .key = 'evalgrp') |> 
+    dplyr::mutate(
+      evalgrp = purrr::map2(grpact, evalgrp, ~ evalgrp_fun(trndat, yr, .x, truvar)),
+      scrs = purrr::map(evalgrp, grpscr_fun)
+    ) |> 
+    dplyr::select(-evalgrp) |> 
+    tidyr::unnest(scrs) |>
+    dplyr::mutate(
+      dplyr::across(`Blade Length scr`:`Abundance scr`, ~ scales::rescale(.x, to = c(100, 65))),
+      `Total scr` = (`Blade Length scr` + `Short Shoot Density scr` + `Abundance scr`) / 3
+    )
+  
+  grades <- c('A', 'A-', 'B+', 'B', 'B-', 'C+', 'C')
+  grdbrk <- c(101, 95, 90, 85, 80, 75, 70, 0)
+
+  our <- scrs |> 
+    dplyr::mutate(
+      dplyr::across(`Blade Length scr`:`Total scr`, ~ cut(-.x, breaks = -grdbrk, labels = grades))
+    )
+
+  return(out)
+  
+}
+
