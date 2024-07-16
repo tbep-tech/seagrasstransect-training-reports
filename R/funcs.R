@@ -581,7 +581,9 @@ scrsum_fun <- function(allgrpscr, grp){
   # convert all to html
   totscr <- paste0('<h1><b>', as.character(totscr), '</b>', ' overall score', '</h1>')
   higher <- paste0('<h3><b>', higher, '</b>', ' groups had higher scores', '</h3>')
+  higher <- ifelse(grepl('One', higher), gsub('groups', 'group', higher), higher)
   lower <- paste0('<h3><b>', lower, '</b>', ' groups had lower scores', '</h3>')
+  lower <- ifelse(grepl('One', lower), gsub('groups', 'group', lower), lower)
   
   screxp <- 'The overall score is based on the average of the scores below for species abundance, blade length, and short shoot density. Each of these three scores is based on how close the reported values are to the overall means across all groups participating in the transect training.  Reported values summarized for each species across all transects that deviate largely from the mean values are given lower scores.  The overall score is then ranked relative to all other groups.'
   
