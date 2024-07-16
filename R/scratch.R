@@ -20,3 +20,6 @@ evalgrp <- evalgrp_fun(trndat, yr, grp, truvar)
 # evaltrntab_fun(evalgrp)
 
 card_fun(evalgrp, grpscr, 'Abundance')
+
+
+scrsum_fun(allgrpscr, grp)

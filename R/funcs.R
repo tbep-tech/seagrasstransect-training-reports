@@ -35,9 +35,13 @@ proc_grp <- function(trndat, yr, quiet = F){
     
     grpnoyr <- gsub('^\\d{4}:\\s', '', grp)
     
+    # scores for metrics and total
     grpscr <- allgrpscr |> 
       dplyr::filter(grpact == !!grp) |>
       dplyr::select(-grpact)
+    
+    # total score summary compared to other groups
+    scrsum <- scrsum_fun(allgrpscr, grp)
     
     # define parameters
     params <- list(
@@ -46,7 +50,8 @@ proc_grp <- function(trndat, yr, quiet = F){
       grpnoyr = grpnoyr,
       transect = transect,
       truvar = truvar,
-      grpscr = grpscr
+      grpscr = grpscr,
+      scrsum = scrsum
     )
 
     outputfl <- trndat |> 
@@ -186,9 +191,9 @@ evaltrntab_fun <- function(evalgrp){
 
   abubultxt <- '<span style="color:#00806E;display:inline;"><b>Abundance reported</b></span> <span style="color:#004F7E;display:inline;"><b>(most common)</b></span>'
   
-  blbultxt <- '<span style="color:#00806E;display:inline;"><b>Blade length reported</b></span> <span style="color:#004F7E;display:inline;"><b>(average)</b></span>'
+  blbultxt <- '<span style="color:#00806E;display:inline;"><b>Blade length reported cm</b></span> <span style="color:#004F7E;display:inline;"><b>(average)</b></span>'
 
-  ssbultxt <- '<span style="color:#00806E;display:inline;"><b>Short shoot density reported</b></span> <span style="color:#004F7E;display:inline;"><b>(average)</b></span>'
+  ssbultxt <- '<span style="color:#00806E;display:inline;"><b>Short shoot density reported per m<sup>2</sup></b></span> <span style="color:#004F7E;display:inline;"><b>(average)</b></span>'
 
   out <- gt::gt(totab) |> 
     gtExtras::gt_plt_bullet(column = abuavenum, target = abutrunum, 
@@ -548,3 +553,50 @@ allgrpscr_fun <- function(trndat, yr, truvar){
   
 }
 
+#' Get text summaries of a groups total score relative to all others
+#' 
+#' @param allgrpscr data frame as returned by \code{\link{allgrpscr_fun}}
+#' @param grp character, group to summarize
+scrsum_fun <- function(allgrpscr, grp){
+  
+  grdlvs <- c('A', 'A-', 'B+', 'B', 'B-', 'C+', 'C')
+  
+  # group total scoreore
+  totscr <- allgrpscr |> 
+    dplyr::filter(grpact == !!grp) |>
+    dplyr::select(-grpact) |> 
+    dplyr::pull(Total) |> 
+    factor(levels = grdlvs)
+  
+  # compare group score to all others
+  alltot <- factor(allgrpscr$Total, levels = grdlvs)
+  
+  higher <- sum(as.numeric(totscr) > as.numeric(alltot)) |> 
+    english::english()
+  higher <- paste0(toupper(substring(higher, 1, 1)), substring(higher, 2))
+  lower <- sum(as.numeric(totscr) < as.numeric(alltot)) |> 
+    english::english()
+  lower <- paste0(toupper(substring(lower, 1, 1)), substring(lower, 2))
+  
+  # convert all to html
+  totscr <- paste0('<h1><b>', as.character(totscr), '</b>', ' overall score', '</h1>')
+  higher <- paste0('<h3><b>', higher, '</b>', ' groups had higher scores', '</h3>')
+  lower <- paste0('<h3><b>', lower, '</b>', ' groups had lower scores', '</h3>')
+  
+  screxp <- 'The overall score is based on the average of the scores below for species abundance, blade length, and short shoot density. Each of these three scores is based on how close the reported values are to the overall means across all groups participating in the transect training.  Reported values summarized for each species across all transects that deviate largely from the mean values are given lower scores.  The overall score is then ranked relative to all other groups.'
+  
+  # ouput as list
+  out <- paste0('
+    <table>
+      <tr>
+        <td>', totscr, higher, lower, '</td>', 
+        '<td><h2><b>How are scores calculated?</b></h2><h4>', screxp, '</h4></td>',
+      '</tr>
+    </table>'
+  )
+  
+  return(out)
+  
+}
+  
+  

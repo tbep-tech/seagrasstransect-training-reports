@@ -14,6 +14,7 @@ params:
   transect: transect
   truvar: truvar
   grpscr: grpscr
+  scrsum: scrsum
   
 execute:
   echo: false
@@ -31,6 +32,7 @@ grpnoyr <- params$grpnoyr
 transect <- params$transect
 truvar <- data.frame(params$truvar)
 grpscr <- params$grpscr # do not make a data frame because names will be different
+scrsum <- params$scrsum
 
 evalgrp <- evalgrp_fun(trndat, yr, grp, truvar)
 
@@ -47,11 +49,11 @@ cards <- list(
 
 ```{r}
 #| title: "Overall summary"
-head(trndat)
+gt::html(scrsum)
 ```
-
+  
 ```{r}
-#| title: "Detailed summary"
+#| title: "Transect summary"
 evaltrntab_fun(evalgrp)
 ```
 
