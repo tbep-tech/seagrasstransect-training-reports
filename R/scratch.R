@@ -11,15 +11,10 @@ truvar <- truvar_fun(trndat, yr)
 
 allgrpscr <- allgrpscr_fun(trndat, yr, truvar)
 
-grpscr <- allgrpscr |> 
-  dplyr::filter(grpact == !!grp) |>
-  dplyr::select(-grpact)
-
 evalgrp <- evalgrp_fun(trndat, yr, grp, truvar)
 
 # evaltrntab_fun(evalgrp)
 
-card_fun(evalgrp, grpscr, 'Abundance')
-
+card_fun(evalgrp, grp, allgrpscr, 'Abundance')
 
 scrsum_fun(allgrpscr, grp)

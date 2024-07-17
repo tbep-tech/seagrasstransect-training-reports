@@ -14,6 +14,7 @@ params:
   transect: transect
   truvar: truvar
   grpscr: grpscr
+  allgrpscr: allgrpscr
   scrsum: scrsum
   
 execute:
@@ -31,16 +32,16 @@ grp <- params$grp
 grpnoyr <- params$grpnoyr
 transect <- params$transect
 truvar <- data.frame(params$truvar)
-grpscr <- params$grpscr # do not make a data frame because names will be different
+grpscr <- tibble::as_tibble(params$grpscr) # do not use as.data.frame, names get coerced
+allgrpscr <- tibble::as_tibble(params$allgrpscr)
 scrsum <- params$scrsum
 
 evalgrp <- evalgrp_fun(trndat, yr, grp, truvar)
 
-cards <- list(
-  card_fun(evalgrp, grpscr, 'Abundance'), 
-  card_fun(evalgrp, grpscr, 'Blade Length'), 
-  card_fun(evalgrp, grpscr, 'Short Shoot Density')
-)
+cards <- purrr::map(
+  c('Abundance', 'Blade Length', 'Short Shoot Density'), 
+  ~ card_fun(evalgrp, grp, allgrpscr, .x)
+  )
 ```
 
 ## Row {height=50%}

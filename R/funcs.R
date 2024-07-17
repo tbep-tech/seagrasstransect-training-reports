@@ -51,6 +51,7 @@ proc_grp <- function(trndat, yr, quiet = F){
       transect = transect,
       truvar = truvar,
       grpscr = grpscr,
+      allgrpscr = allgrpscr,
       scrsum = scrsum
     )
 
@@ -303,9 +304,10 @@ sppdiff_fun <- function(evalgrp, vr = c('Abundance', 'Blade Length', 'Short Shoo
 #' Create summary card for species metric
 #' 
 #' @param evalgrp data frame with evaluation group data
-#' @param grpscr data frame with group score data
+#' @param grp character with group name
+#' @param allgrpscr data frame with all group scores
 #' @param vr character vector with variable name
-card_fun <- function(evalgrp, grpscr, vr = c('Abundance', 'Blade Length', 'Short Shoot Density')){
+card_fun <- function(evalgrp, grp, allgrpscr, vr = c('Abundance', 'Blade Length', 'Short Shoot Density')){
   
   vr <- match.arg(vr)
   
@@ -316,7 +318,13 @@ card_fun <- function(evalgrp, grpscr, vr = c('Abundance', 'Blade Length', 'Short
   
   sppdiff <- sppdiff_fun(evalgrp, vr)
 
+  grpscr <- allgrpscr |> 
+    dplyr::filter(grpact == !!grp) |>
+    dplyr::select(-grpact)
+  
   scr <- as.character(grpscr[[vr]])
+  
+  hiscr <- scr %in% c('A-', 'B+', 'B')
   
   if(vr == 'Abundance'){
 
@@ -329,12 +337,6 @@ card_fun <- function(evalgrp, grpscr, vr = c('Abundance', 'Blade Length', 'Short
     sumtxt <- paste(sgndff, sumtxt$avediff, ' ', vruni, ' across transects', sep = '')
     sumtxt <- paste0('<span><b><i>All species</i/></b> ', sumtxt, '</span>')
   
-    txtdsc <- dplyr::case_when(
-      sgndff == '' ~ 'reported values are close to average, good job!',
-      sgndff == '+' ~ 'reported values are generally higher than average',
-      sgndff == '-' ~ 'reported values are generally lower than average'
-    )
-    
     spptxt <- sppdiff |> 
       dplyr::mutate(
         sgndff = sign(avediff),
@@ -405,12 +407,6 @@ card_fun <- function(evalgrp, grpscr, vr = c('Abundance', 'Blade Length', 'Short
     sumtxt <- paste(gsub('\\-', '', sgndff), sumtxt$avediff, ' ', vruni, ' across transects', sep = '')
     sumtxt <- paste0('<span><b><i>All species</i></b> ', sumtxt, '</span>')
 
-    txtdsc <- dplyr::case_when(
-      sgndff == '' ~ 'reported values are close to average, good job!',
-      sgndff == '+' ~ 'reported values are generally higher than average',
-      sgndff == '-' ~ 'reported values are generally lower than average'
-    )
-
     spptxt <- sppdiff |> 
       dplyr::mutate(
         sgndff = sign(avediff),
@@ -469,8 +465,26 @@ card_fun <- function(evalgrp, grpscr, vr = c('Abundance', 'Blade Length', 'Short
       plotly::config(displayModeBar = F)    
     
   }
+
+  txtdev <- dplyr::case_when(
+    scr == 'A' ~ 'reported values deviate very little from the average',
+    hiscr ~ 'reported values deviate a little from the average',
+    !hiscr ~ 'reported values deviate a lot from the average',
+  )
   
-  txtdsc <- paste0('<span><h3><b>', scr, '</b></h3><h4> ', txtdsc, '</h4></span>')
+  sgndffuni <- unique(sign(sppdiff$avediff))
+  
+  txtdir <- dplyr::case_when(
+    scr == 'A' ~ ', good job!',
+    length(sgndffuni) > 1 & scr != 'A' ~ ', varies by species',
+    sgndff == '+' & hiscr & scr != 'A' ~ ', slightly higher',
+    sgndff == '-' & hiscr & scr != 'A' ~ ', slightly lower',
+    sgndff == '+' & !hiscr & scr != 'A' ~ ', much higher',
+    sgndff == '-' & !hiscr & scr != 'A' ~ ', much lower', 
+    T ~ ''
+  )
+  txtdsc <- paste0('<span><h3><b>', scr, '</b></h3><h4> ', txtdev, txtdir, '</h4></span>')
+  
   
   bslib::value_box(
     title = gt::html(paste0('<b>', vr, ' summary</b>')),
@@ -482,71 +496,45 @@ card_fun <- function(evalgrp, grpscr, vr = c('Abundance', 'Blade Length', 'Short
   
 }
 
-#' Calculate percent difference and scores by by metric for a group
-#' 
-#' @param evalgrp A data frame as returned by \code{\link{evalgrp_fun}}
-grpscr_fun <- function(evalgrp){
-  
-  perdiff <- evalgrp |> 
-    dplyr::mutate(
-      dplyr::across(`Blade Length aveval`:`Short Shoot Density truval`, as.numeric),
-      `Abundance diff` = as.numeric(`Abundance aveval`) - as.numeric(`Abundance truval`),
-      `Abundance perdiff` = (`Abundance diff` / 8) * 100,
-      `Blade Length perdiff` = (`Blade Length aveval` - `Blade Length truval`) / `Blade Length truval` * 100,
-      `Short Shoot Density perdiff` = (`Short Shoot Density aveval` - `Short Shoot Density truval`) / `Short Shoot Density truval` * 100
-    ) |> 
-    dplyr::select(Site, Savspecies, `Blade Length perdiff`, `Short Shoot Density perdiff`, `Abundance perdiff`)
-
-  out <- perdiff |> 
-    # dplyr::mutate(
-    #   dplyr::across(`Blade Length perdiff`:`Abundance perdiff`, ~ ifelse(abs(.x) > 10, 1, 0))
-    # ) |> 
-    dplyr::summarise(
-      dplyr::across(`Blade Length perdiff`:`Abundance perdiff`, ~ ifelse(all(is.na(.x)), NA, mean(abs(.x), na.rm = T))),
-      .by = Site
-    ) |> 
-    dplyr::summarise(
-      dplyr::across(`Blade Length perdiff`:`Abundance perdiff`, ~ mean(.x, na.rm = T))
-    ) |> 
-    dplyr::rename(
-      `Blade Length` = `Blade Length perdiff`,
-      `Short Shoot Density` = `Short Shoot Density perdiff`,
-      `Abundance` = `Abundance perdiff`
-    )
-  
-  return(out)
-  
-}
-
 #' Calculate scores for all groups based on distribution of scores
 #' 
 #' @param trndat data frame of all seagrass transect training data
 #' @param yr integer, year
 #' @param truvar data frame "true" values from training data for a given year
 allgrpscr_fun <- function(trndat, yr, truvar){
-  
+
   scrs <- trndat |> 
     dplyr::filter(yr == !!yr) |> 
     dplyr::select(grpact) |> 
     dplyr::distinct() |> 
     dplyr::group_nest(grpact, .key = 'evalgrp') |> 
     dplyr::mutate(
-      evalgrp = purrr::map2(grpact, evalgrp, ~ evalgrp_fun(trndat, yr, .x, truvar)),
-      scrs = purrr::map(evalgrp, grpscr_fun)
+      evalgrp = purrr::map2(grpact, evalgrp, ~ evalgrp_fun(trndat, yr, .x, truvar))
+    ) |> 
+    tidyr::crossing(var = c('Abundance', 'Blade Length', 'Short Shoot Density')) |> 
+    dplyr::mutate(
+      avediff = purrr::pmap(list(evalgrp, var), function(evalgrp, var){
+        sppdiff_fun(evalgrp, var) |> 
+          dplyr::summarise(
+            avediff = mean(abs(avediff), na.rm = T)
+          ) |> 
+          dplyr::pull(avediff)
+      })
     ) |> 
     dplyr::select(-evalgrp) |> 
-    tidyr::unnest(scrs) |>
+    tidyr::unnest(avediff) |>
+    tidyr::pivot_wider(names_from = var, values_from = avediff) |> 
     dplyr::mutate(
-      dplyr::across(`Blade Length`:`Abundance`, ~ scales::rescale(.x, to = c(100, 65))),
+      dplyr::across(`Abundance`:`Short Shoot Density`, ~ scales::rescale(abs(.x), to = c(100, 65))),
       `Total` = (`Blade Length` + `Short Shoot Density` + `Abundance`) / 3
     )
-  
+
   grades <- c('A', 'A-', 'B+', 'B', 'B-', 'C+', 'C')
   grdbrk <- c(101, 95, 90, 85, 80, 75, 70, 0)
 
   out <- scrs |> 
     dplyr::mutate(
-      dplyr::across(`Blade Length`:`Total`, ~ cut(-.x, breaks = -grdbrk, labels = grades) |> as.character())
+      dplyr::across(`Abundance`:`Total`, ~ cut(-.x, breaks = -grdbrk, labels = grades) |> as.character())
     )
 
   return(out)
@@ -577,13 +565,23 @@ scrsum_fun <- function(allgrpscr, grp){
   lower <- sum(as.numeric(totscr) < as.numeric(alltot)) |> 
     english::english()
   lower <- paste0(toupper(substring(lower, 1, 1)), substring(lower, 2))
+  equal <- sum(as.numeric(totscr) == as.numeric(alltot)) |> 
+    english::english()
+  equal <- paste0(toupper(substring(equal, 1, 1)), substring(equal, 2))
+  
+  spcs1 <- rep('&nbsp;', 12) |> 
+    paste0(collapse = '')
+  spcs2 <- rep('&nbsp;', 20) |> 
+    paste0(collapse = '')
   
   # convert all to html
-  totscr <- paste0('<h1><b>', as.character(totscr), '</b>', ' overall score', '</h1>')
-  higher <- paste0('<h3><b>', higher, '</b>', ' groups had higher scores', '</h3>')
+  totscr <- paste0('<h1>', spcs1, '<b>', as.character(totscr), '</b>', ' overall score', '</h1>')
+  higher <- paste0('<h3>', spcs2, '<b>', higher, '</b>', ' groups had a higher score', '</h3>')
   higher <- ifelse(grepl('One', higher), gsub('groups', 'group', higher), higher)
-  lower <- paste0('<h3><b>', lower, '</b>', ' groups had lower scores', '</h3>')
+  lower <- paste0('<h3>', spcs2, '<b>', lower, '</b>', ' groups had a lower score', '</h3>')
   lower <- ifelse(grepl('One', lower), gsub('groups', 'group', lower), lower)
+  equal <- paste0('<h3>', spcs2, '<b>', equal, '</b>', ' groups had the same score', '</h3>')
+  equal <- ifelse(grepl('One', equal), gsub('groups', 'group', equal), equal)
   
   screxp <- 'The overall score is based on the average of the scores below for species abundance, blade length, and short shoot density. Each of these three scores is based on how close the reported values are to the overall means across all groups participating in the transect training.  Reported values summarized for each species across all transects that deviate largely from the mean values are given lower scores.  The overall score is then ranked relative to all other groups.'
   
@@ -591,7 +589,7 @@ scrsum_fun <- function(allgrpscr, grp){
   out <- paste0('
     <table>
       <tr>
-        <td>', totscr, higher, lower, '</td>', 
+        <td>', totscr, higher, lower, equal, '</td>', 
         '<td><h2><b>How are scores calculated?</b></h2><h4>', screxp, '</h4></td>',
       '</tr>
     </table>'
