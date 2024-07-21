@@ -51,13 +51,16 @@ h6 {
 .navbar-brand { /* dashboard title */
   font-family: 'Roboto Condensed';
   font-weight: bold;
-  color: #FF0000;
 }
 
 .navbar-nav li a:hover, .navbar-nav > .active > a {
   color: #fff !important;
   background-color:#5c4a42!important;
   background-image: none !important;
+}
+
+.quarto-dashboard #quarto-dashboard-header .navbar .navbar-nav .active {
+    background-color: #004F7E;
 }
 
 /* sidebar */
@@ -250,10 +253,6 @@ a {
     font-family: 'Roboto',Helvetica,Arial,Lucida,sans-serif;
     font-weight: 500;
 	text-decoration:none;
-}
-
-a:visited {
-  color: #db5b25;
 }
 
 a:hover {

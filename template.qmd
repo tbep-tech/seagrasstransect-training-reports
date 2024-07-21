@@ -31,8 +31,8 @@ yr <- params$yr
 grp <- params$grp
 grpnoyr <- params$grpnoyr
 transect <- params$transect
-truvar <- data.frame(params$truvar)
-grpscr <- tibble::as_tibble(params$grpscr) # do not use as.data.frame, names get coerced
+truvar <- tibble::as_tibble(params$truvar) # do not use as.data.frame, names get coerced
+grpscr <- tibble::as_tibble(params$grpscr) 
 allgrpscr <- tibble::as_tibble(params$allgrpscr)
 scrsum <- params$scrsum
 
@@ -43,6 +43,8 @@ cards <- purrr::map(
   ~ card_fun(evalgrp, grp, allgrpscr, .x)
   )
 ```
+
+# Scores
 
 ## Row {height=50%}
 
@@ -63,3 +65,32 @@ evaltrntab_fun(evalgrp)
 ```{r}
 bslib::layout_column_wrap(width = '250px', fill = F, cards[[1]], cards[[2]], cards[[3]])
 ```
+
+# How to improve
+
+## Row {height=50%}
+
+```{r}
+#| title: "Abundance"
+1 + 1
+```
+
+```{r}
+#| title: "Blade Length"
+1 + 1
+```
+
+```{r}
+#| title: "Short Shoot Density"
+1 + 1
+```
+
+## Row {height=50%}
+
+::: {.card title='Species identification'}
+[![](images/sppguide.png)](https://drive.google.com/file/d/1naZpND_Ur90abqND-ZhZ_fJtBBiuetjt/view)
+:::
+
+::: {.card title='Web portal'}
+{{< video https://www.youtube.com/embed/cF9VluXSq0E?si=TnnovjUuiZTSzCj_ >}}
+:::

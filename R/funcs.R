@@ -390,7 +390,9 @@ card_fun <- function(evalgrp, grp, allgrpscr, vr = c('Abundance', 'Blade Length'
       plotly::layout(
         xaxis = list(title = '', ticktext = levels(sppdiff$Savspecies), tickvals = sppdiff$Savnum),
         yaxis = list(title = 'Average <span style="color:#00806E;display:inline;"><b>reported</b></span> vs <span style="color:#004F7E;display:inline;"><b>true</b></span>', tickvals = 0:7, ticktext = c('no coverage', 'solitary', 'few', '<5%', '5-25%', '25-50%', '51-75%', '76-100%')), 
-        showlegend = F
+        showlegend = F,
+        paper_bgcolor = "#9589841A",
+        plot_bgcolor = "#9589841A"
       ) |> 
       plotly::config(displayModeBar = F)    
     
@@ -460,7 +462,9 @@ card_fun <- function(evalgrp, grp, allgrpscr, vr = c('Abundance', 'Blade Length'
       plotly::layout(
         xaxis = list(title = '', ticktext = levels(sppdiff$Savspecies), tickvals = sppdiff$Savnum),
         yaxis = list(title = 'Average <span style="color:#00806E;display:inline;"><b>reported</b></span> vs <span style="color:#004F7E;display:inline;"><b>true</b></span>'), 
-        showlegend = F
+        showlegend = F,
+        paper_bgcolor = "#9589841A",
+        plot_bgcolor = "#9589841A"
       ) |> 
       plotly::config(displayModeBar = F)    
     
@@ -491,7 +495,8 @@ card_fun <- function(evalgrp, grp, allgrpscr, vr = c('Abundance', 'Blade Length'
     value = gt::html(txtdsc),
     gt::html(spptxt), 
     showcase = p,
-    showcase_layout = bslib::showcase_left_center(max_height = "300px", width = 0.4)
+    showcase_layout = bslib::showcase_left_center(max_height = "300px", width = 0.4)#, 
+    # theme = bslib::value_box_theme(bg = '#9589841A', fg = '#004F7E')
   ) 
   
 }
@@ -565,7 +570,7 @@ scrsum_fun <- function(allgrpscr, grp){
   lower <- sum(as.numeric(totscr) < as.numeric(alltot)) |> 
     english::english()
   lower <- paste0(toupper(substring(lower, 1, 1)), substring(lower, 2))
-  equal <- sum(as.numeric(totscr) == as.numeric(alltot)) |> 
+  equal <- (sum(as.numeric(totscr) == as.numeric(alltot)) - 1) |> 
     english::english()
   equal <- paste0(toupper(substring(equal, 1, 1)), substring(equal, 2))
   
