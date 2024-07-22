@@ -72,17 +72,17 @@ bslib::layout_column_wrap(width = '250px', fill = F, cards[[1]], cards[[2]], car
 
 ```{r}
 #| title: "Abundance"
-1 + 1
+scrimp_fun(allgrpscr, grp, 'Abundance')
 ```
 
 ```{r}
 #| title: "Blade Length"
-1 + 1
+scrimp_fun(allgrpscr, grp, 'Blade Length')
 ```
 
 ```{r}
 #| title: "Short Shoot Density"
-1 + 1
+scrimp_fun(allgrpscr, grp, 'Short Shoot Density')
 ```
 
 ## Row {height=50%}

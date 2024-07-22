@@ -390,9 +390,7 @@ card_fun <- function(evalgrp, grp, allgrpscr, vr = c('Abundance', 'Blade Length'
       plotly::layout(
         xaxis = list(title = '', ticktext = levels(sppdiff$Savspecies), tickvals = sppdiff$Savnum),
         yaxis = list(title = 'Average <span style="color:#00806E;display:inline;"><b>reported</b></span> vs <span style="color:#004F7E;display:inline;"><b>true</b></span>', tickvals = 0:7, ticktext = c('no coverage', 'solitary', 'few', '<5%', '5-25%', '25-50%', '51-75%', '76-100%')), 
-        showlegend = F,
-        paper_bgcolor = "#9589841A",
-        plot_bgcolor = "#9589841A"
+        showlegend = F
       ) |> 
       plotly::config(displayModeBar = F)    
     
@@ -462,9 +460,7 @@ card_fun <- function(evalgrp, grp, allgrpscr, vr = c('Abundance', 'Blade Length'
       plotly::layout(
         xaxis = list(title = '', ticktext = levels(sppdiff$Savspecies), tickvals = sppdiff$Savnum),
         yaxis = list(title = 'Average <span style="color:#00806E;display:inline;"><b>reported</b></span> vs <span style="color:#004F7E;display:inline;"><b>true</b></span>'), 
-        showlegend = F,
-        paper_bgcolor = "#9589841A",
-        plot_bgcolor = "#9589841A"
+        showlegend = F
       ) |> 
       plotly::config(displayModeBar = F)    
     
@@ -488,7 +484,6 @@ card_fun <- function(evalgrp, grp, allgrpscr, vr = c('Abundance', 'Blade Length'
     T ~ ''
   )
   txtdsc <- paste0('<span><h3><b>', scr, '</b></h3><h4> ', txtdev, txtdir, '</h4></span>')
-  
   
   bslib::value_box(
     title = gt::html(paste0('<b>', vr, ' summary</b>')),
@@ -603,5 +598,34 @@ scrsum_fun <- function(allgrpscr, grp){
   return(out)
   
 }
+ 
+#' Get text summary of how to improve score for a variable
+#' 
+#' @param allgrpscr data frame as returned by \code{\link{allgrpscr_fun}}
+#' @param grp character, group to summarize
+#' @param vr character vector with variable name
+scrimp_fun <- function(allgrpscr, grp, vr = c('Abundance', 'Blade Length', 'Short Shoot Density')){
   
+  vr <- match.arg(vr)
+  
+  vdlnk <- list(
+    Abundance = 'https://youtu.be/jfnVlIjJ-o4?list=PLfJ6-D-exF9RKU6i3A7z0uwfeiyayULqk&t=320',
+    `Blade Length` = 'https://youtu.be/jfnVlIjJ-o4?list=PLfJ6-D-exF9RKU6i3A7z0uwfeiyayULqk&t=515',
+    `Short Shoot Density` = 'https://youtu.be/jfnVlIjJ-o4?list=PLfJ6-D-exF9RKU6i3A7z0uwfeiyayULqk&t=555'
+  )
+  
+  scr <- allgrpscr |> 
+    dplyr::filter(grpact == !!grp) |> 
+    dplyr::pull(!!vr)
+  
+  out <- dplyr::case_when(
+    scr %in% c('A', 'A-') ~ "Looks good, keep doing what you're doing!", 
+    T ~ paste0('Room for improvement! Learn how to brush up on ', tolower(vr), ' by viewing the link <a target="_blank" href="', vdlnk[[vr]], '">here</a>.') 
+  )
+  out <- paste0('<span><h3><b>', scr, '</b></h3><h4>', out, '</h4></span>')
+  out <- gt::html(out)
+  
+  return(out)
+  
+}
   
