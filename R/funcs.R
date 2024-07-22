@@ -583,7 +583,7 @@ scrsum_fun <- function(allgrpscr, grp){
   equal <- paste0('<h3>', spcs2, '<b>', equal, '</b>', ' groups had the same score', '</h3>')
   equal <- ifelse(grepl('One', equal), gsub('groups', 'group', equal), equal)
   
-  screxp <- 'The overall score is based on the average of the scores below for species abundance, blade length, and short shoot density. Each of these three scores is based on how close the reported values are to the overall means across all groups participating in the transect training.  Reported values summarized for each species across all transects that deviate largely from the mean values are given lower scores.  The overall score is then ranked relative to all other groups.'
+  screxp <- 'The overall score is based on the average of the scores below for species abundance, blade length, and short shoot density. Each of these three scores is based on how close the reported values are to the overall averages across all groups participating in the transect training.  Reported values summarized for each species across all transects that deviate largely from the averages are given lower scores.  The overall score is then ranked relative to all other groups.'
   
   # ouput as list
   out <- paste0('
