@@ -10,11 +10,21 @@ save(trndat, file = here('data/trndat.rda'), compress = 'bzip2', version = 2)
 
 # create reports for the year -----------------------------------------------------------------
 
-yr <- 2024
+data(trndat)
+
+yrs <- 2024
+# yrs <- unique(trndat$yr)
+
+purrr::walk(yrs, ~ proc_grp(trndat, .x, quiet = F))
 
 # trndattmp <- trndat |>
-#   dplyr::filter(yr == !!yr) |>
-#   dplyr::filter(grp == 'A')
+#   dplyr::filter(yr == !!yrs) |>
+#   dplyr::filter(grp == 'B')
 # 
 # proc_grp(trndattmp, yr, quiet = F)
-proc_grp(trndat, yr, quiet = F)
+
+# create index --------------------------------------------------------------------------------
+
+data(trndat)
+
+writeindex_fun(trndat)

@@ -1,3 +1,50 @@
+#' Write index.html file for training report cards
+#' 
+#' @param trndata data frame of transect training data
+writeindex_fun <- function(trndat){
+  
+  fls <- list.files(here::here('docs'), full.names = F)
+  fls <- fls[!grepl('index.html', fls)]
+  
+  # create html string for lists by year and group
+  flsdf <- tibble::tibble(
+    fls = fls
+  ) |> 
+    dplyr::mutate(
+      yr = gsub(fls, pattern = '.*_(\\d{4}).*', replacement = '\\1'), 
+      grp = gsub(fls, pattern = '(.*)_(\\d{4}).*', replacement = '\\1')
+    ) |> 
+    dplyr::rowwise() |> 
+    dplyr::mutate( 
+      grpact = unique(trndat$grpact[trndat$yr == yr & trndat$grp == grp]), 
+      grpact = gsub('^\\d{4}: ', '', grpact),
+      grphtml = paste0('<li><a href="', fls, '">', grpact, '</a></li>')
+    ) |> 
+    dplyr::ungroup() |> 
+    dplyr::arrange(yr, grp) |> 
+    dplyr::select(yr, grphtml) |> 
+    dplyr::mutate(
+      yr = paste0('<h2>', yr, '</h2>\n')
+    ) |> 
+    dplyr::group_nest(yr) |> 
+    dplyr::arrange(desc(yr)) |> 
+    dplyr::mutate(
+      data = purrr::map(data, ~ dplyr::pull(.x) |> paste0(collapse = '\n')),
+      data = purrr::map(data, ~ paste0('<ul>\n', .x, '\n</ul>\n'))
+    ) |> 
+    tidyr::unnest('data') |> 
+    tidyr::unite('yr', yr, data, sep = '') |> 
+    dplyr::pull('yr') |> 
+    paste0(collapse = '') 
+  
+  # add html header tags
+  towrt <- paste0('<html>\n<body>\n<h1>Transect training report cards</h1>\n', flsdf, '</body>\n</html>')
+  
+  # write output
+  writeLines(towrt, con = here::here('docs/index.html'))
+  
+}
+
 #' Process training report by group
 #'
 #' @param trndat data frame, training data
