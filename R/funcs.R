@@ -208,6 +208,9 @@ evalgrp_fun <- function(trndat, yr, grp, truvar){
 #' @param evalgrp data frame, group evaluation data
 evaltrntab_fun <- function(evalgrp){
   
+  rptcol <- '#004F7E'
+  trucol <- '#958984'
+  
   totab <- evalgrp |> 
     dplyr::select(Site, Species = Savspecies, abuaveval = `Abundance aveval`, 
            abutruval = `Abundance truval`, blavenum = `Blade Length aveval`, 
@@ -237,26 +240,26 @@ evaltrntab_fun <- function(evalgrp){
     dplyr::mutate(Site = paste('Transect', Site)) |> 
     dplyr::group_by(Site)
 
-  abubultxt <- '<span style="color:#00806E;display:inline;"><b>Abundance reported</b></span> <span style="color:#004F7E;display:inline;"><b>(most common)</b></span>'
+  abubultxt <- paste0('<span style="color:', rptcol, ';display:inline;"><b>Abundance reported</b></span> <span style="color:', trucol, ';display:inline;"><b>(most common)</b></span>')
   
-  blbultxt <- '<span style="color:#00806E;display:inline;"><b>Blade length reported cm</b></span> <span style="color:#004F7E;display:inline;"><b>(average)</b></span>'
+  blbultxt <- gsub('Abundance reported', 'Blade length reported cm', abubultxt)
 
-  ssbultxt <- '<span style="color:#00806E;display:inline;"><b>Short shoot density reported per m<sup>2</sup></b></span> <span style="color:#004F7E;display:inline;"><b>(average)</b></span>'
+  ssbultxt <- gsub('Abundance reported', 'Short shoot density reported per m <sup>2</sup>', abubultxt)
 
   out <- gt::gt(totab) |> 
-    gtExtras::gt_plt_bullet(column = abuavenum, target = abutrunum, 
-                  palette = c('#00806E', '#004F7E')) |> 
-    gtExtras::gt_plt_bullet(column = blavenum, target = bltrunum, 
-                  palette = c('#00806E', '#004F7E')) |> 
-    gtExtras::gt_plt_bullet(column = ssavenum, target = sstrunum,
-                  palette = c('#00806E', '#004F7E')) |>
+    gtExtras::gt_plt_bullet(column = abutrunum, target = abuavenum, 
+                  palette = c(trucol, rptcol)) |> 
+    gtExtras::gt_plt_bullet(column = bltrunum, target = blavenum, 
+                  palette = c(trucol, rptcol)) |> 
+    gtExtras::gt_plt_bullet(column = sstrunum, target = ssavenum,
+                  palette = c(trucol, rptcol)) |>
     gt::cols_label(
       `Abundance reported (most common)`= gt::html(abubultxt),
       `Blade Length reported (average)` = gt::html(blbultxt), 
       `Short Shoot Density reported (average)` = gt::html(ssbultxt),
-      abuavenum = '',
-      blavenum = '',
-      ssavenum = ''
+      abutrunum = '',
+      bltrunum = '',
+      sstrunum = ''
     ) |> 
     gt::tab_style(
       style = gt::cell_text(style = "italic"),
@@ -270,20 +273,20 @@ evaltrntab_fun <- function(evalgrp){
         columns = c(`Abundance reported (most common)`, `Blade Length reported (average)`, `Short Shoot Density reported (average)`)
       ),
       fn = function(x) {
-        x <- gsub('^(.*)\\s(.*)$', '<span style="color:#00806E;display:inline;"><b>\\1</b></span> <span style="color:#004F7E";display:inline;"><b>\\2</b></span>', x)
+        x <- gsub('^(.*)\\s(.*)$', paste0('<span style="color:', rptcol, ';display:inline;"><b>\\1</b></span> <span style="color:', trucol, ';display:inline;"><b>\\2</b></span>'), x)
         x
       }
     ) |>
     gt::cols_move(
-      columns = abuavenum,
+      columns = abutrunum,
       after = `Abundance reported (most common)`
     ) |> 
     gt::cols_move(
-      columns = blavenum,
+      columns = bltrunum,
       after = `Blade Length reported (average)`
     ) |>
     gt::cols_move(
-      columns = ssavenum,
+      columns = sstrunum,
       after = `Short Shoot Density reported (average)`
     ) |> 
     gt::cols_align('left')
@@ -363,6 +366,9 @@ card_fun <- function(evalgrp, grp, allgrpscr, vr = c('Abundance', 'Blade Length'
              'Short Shoot Density' = 'shoots per m<sup>2</sup> difference on average')
   vruni <- vruni[[vr]]
   
+  rptcol <- '#004F7E'
+  trucol <- '#958984'
+  
   sppdiff <- sppdiff_fun(evalgrp, vr)
 
   grpscr <- allgrpscr |> 
@@ -415,33 +421,30 @@ card_fun <- function(evalgrp, grp, allgrpscr, vr = c('Abundance', 'Blade Length'
       Savnum = as.numeric(Savspecies)
     )
   
-  yxs <- list(title = 'Average <span style="color:#00806E;display:inline;"><b>reported</b></span> vs <span style="color:#004F7E;display:inline;"><b>true</b></span>')
+  # barplot y axis differs if abundance or not
+  ttl <- paste0('Average <span style="color:', rptcol, ';display:inline;"><b>reported</b></span> vs <span style="color:', trucol, ';display:inline;"><b>true</b></span>')
+  yxs <- list(title = ttl )
   if(vr == 'Abundance')
-    yxs <- list(title = 'Average <span style="color:#00806E;display:inline;"><b>reported</b></span> vs <span style="color:#004F7E;display:inline;"><b>true</b></span>', tickvals = 0:7, ticktext = c('no coverage', 'solitary', 'few', '<5%', '5-25%', '25-50%', '51-75%', '76-100%'))
+    yxs <- list(title = ttl, tickvals = 0:7, ticktext = c('no coverage', 'solitary', 'few', '<5%', '5-25%', '25-50%', '51-75%', '76-100%'))
 
   # bar plot
   p <- plotly::plot_ly(
     sppdiff,
     x = ~ Savnum,
-    y = ~ aveval,
+    y = ~ truval,
     type = 'bar',
-    marker = list(color = '#00806E'), 
-    name = 'Reported value'
+    marker = list(color = trucol), 
+    name = 'True value'
   ) |> 
     plotly::add_segments(
       x = ~ Savnum - 0.4,
       xend = ~ Savnum + 0.4,
-      y = ~ truval,
-      yend = ~ truval,
-      line = list(color = '#004F7E', width = 7), 
-      name = 'True value',
+      y = ~ aveval,
+      yend = ~ aveval,
+      line = list(color = rptcol, width = 7), 
+      name = 'Reported value',
       inherit = F
     ) |>
-    plotly::layout(
-      xaxis = list(title = '', ticktext = levels(sppdiff$Savspecies), tickvals = sppdiff$Savnum),
-      yaxis = list(title = 'Average <span style="color:#00806E;display:inline;"><b>reported</b></span> vs <span style="color:#004F7E;display:inline;"><b>true</b></span>'), 
-      showlegend = F
-    ) |> 
     plotly::config(displayModeBar = F) |> 
     plotly::layout(
       xaxis = list(title = '', ticktext = levels(sppdiff$Savspecies), tickvals = sppdiff$Savnum),
@@ -474,8 +477,7 @@ card_fun <- function(evalgrp, grp, allgrpscr, vr = c('Abundance', 'Blade Length'
     value = gt::html(txtdsc),
     gt::html(spptxt), 
     showcase = p,
-    showcase_layout = bslib::showcase_left_center(max_height = "300px", width = 0.4)#, 
-    # theme = bslib::value_box_theme(bg = '#9589841A', fg = '#004F7E')
+    showcase_layout = bslib::showcase_left_center(max_height = "300px", width = 0.4)
   ) 
   
 }
