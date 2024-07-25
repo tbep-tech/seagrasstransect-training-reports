@@ -6,13 +6,13 @@ source(here::here('R/funcs.R'))
 
 trndat <- read_transect(training = TRUE)
 
-save(trndat, file = here('data/trndat.rda'), compress = 'bzip2', version = 2)
+save(trndat, file = here::here('data/trndat.rda'), compress = 'bzip2', version = 2)
 
 # create reports for the year -----------------------------------------------------------------
 
 data(trndat)
 
-yrs <- 2024
+# yrs <- 2024
 yrs <- unique(trndat$yr)
 
 purrr::walk(yrs, ~ proc_grp(trndat, .x, quiet = F))
