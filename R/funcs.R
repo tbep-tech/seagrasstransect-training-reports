@@ -422,28 +422,42 @@ card_fun <- function(evalgrp, grp, allgrpscr, vr = c('Abundance', 'Blade Length'
       Savnum = as.numeric(Savspecies)
     )
   
-  # barplot y axis differs if abundance or not
+  # barplot y axis and hover text differs if abundance or not
   ttl <- paste0('Average <span style="color:', rptcol, ';display:inline;"><b>reported</b></span> vs <span style="color:', trucol, ';display:inline;"><b>true</b></span>')
   yxs <- list(title = ttl )
-  if(vr == 'Abundance')
-    yxs <- list(title = ttl, tickvals = 0:7, ticktext = c('no coverage', 'solitary', 'few', '<5%', '5-25%', '25-50%', '51-75%', '76-100%'))
+  hovtxttr <- paste0('True, ', sppdiff$truval)
+  hovtxtrp <- paste0('Reported, ', sppdiff$aveval)
+  if(vr == 'Abundance'){
+    abulv <- 0:7
+    abulb <- c('no coverage', 'solitary', 'few', '<5%', '5-25%', '25-50%', '51-75%', '76-100%')
+    yxs <- list(title = ttl, tickvals = abulv, ticktext = abulb)
+    hovtxttr <- paste0('True, ', factor(sppdiff$truval, levels = abulv, labels = abulb))
+    hovtxtrp <- paste0('Reported, ', factor(sppdiff$aveval, levels = abulv, labels = abulb))
+  }
 
   # bar plot
   p <- plotly::plot_ly(
-    sppdiff,
-    x = ~ Savnum,
-    y = ~ truval,
-    type = 'bar',
-    marker = list(color = trucol), 
-    name = 'True value'
-  ) |> 
+      sppdiff,
+      x = ~ Savnum,
+      y = ~ truval,
+      type = 'bar',
+      marker = list(color = trucol), 
+      name = 'True value',
+      text = hovtxttr,
+      hoverinfo = 'text',
+      textposition = 'none'
+    ) |> 
     plotly::add_segments(
+      data = sppdiff,
       x = ~ Savnum - 0.4,
       xend = ~ Savnum + 0.4,
       y = ~ aveval,
       yend = ~ aveval,
       line = list(color = rptcol, width = 7), 
       name = 'Reported value',
+      text = hovtxtrp,
+      hoverinfo = 'text',
+      textposition = 'none',
       inherit = F
     ) |>
     plotly::config(displayModeBar = F) |> 
@@ -452,7 +466,7 @@ card_fun <- function(evalgrp, grp, allgrpscr, vr = c('Abundance', 'Blade Length'
       yaxis = yxs,
       showlegend = F
     ) |> 
-    plotly::config(displayModeBar = F)    
+    plotly::config(displayModeBar = F)
 
   txtdev <- dplyr::case_when(
     scr == 'A' ~ 'reported values deviate very little from the average',
