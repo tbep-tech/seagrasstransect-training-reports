@@ -236,6 +236,7 @@ evaltrntab_fun <- function(evalgrp){
     dplyr::select(-abuaveval, -abutruval, -`Abundance truval`, -`Blade Length truval`, -`Short Shoot Density truval`) |> 
     dplyr::mutate_all(~ ifelse(. == 'NA (NA)', '', .)) |> 
     dplyr::mutate_at(c('Abundance reported (most common)', 'Blade Length reported (average)', 'Short Shoot Density reported (average)'), ~ gsub('^NA', '-', .)) |>
+    dplyr::mutate_at(c('abuavenum', 'blavenum', 'ssavenum'), ~ ifelse(is.na(.x), 0, .x)) |> # bullet won't plot if target is NA
     dplyr::arrange(Site, Species) |> 
     dplyr::mutate(Site = paste('Transect', Site)) |> 
     dplyr::group_by(Site)
@@ -247,8 +248,8 @@ evaltrntab_fun <- function(evalgrp){
   ssbultxt <- gsub('Abundance reported', 'Short shoot density reported per m <sup>2</sup>', abubultxt)
 
   out <- gt::gt(totab) |> 
-    gtExtras::gt_plt_bullet(column = abutrunum, target = abuavenum, 
-                  palette = c(trucol, rptcol)) |> 
+    gtExtras::gt_plt_bullet(column = abutrunum, target = abuavenum,
+                  palette = c(trucol, rptcol)) |>
     gtExtras::gt_plt_bullet(column = bltrunum, target = blavenum, 
                   palette = c(trucol, rptcol)) |> 
     gtExtras::gt_plt_bullet(column = sstrunum, target = ssavenum,
@@ -561,7 +562,7 @@ scrsum_fun <- function(allgrpscr, grp){
     paste0(collapse = '')
   
   # convert all to html
-  totscr <- paste0('<h1>', spcs1, '<b>', as.character(totscr), '</b>', ' overall score', '</h1>')
+  tottxt <- paste0('<h1>', spcs1, '<b>', as.character(totscr), '</b>', ' overall score', '</h1>')
   higher <- paste0('<h3>', spcs2, '<b>', higher, '</b>', ' groups had a higher score', '</h3>')
   higher <- ifelse(grepl('One', higher), gsub('groups', 'group', higher), higher)
   lower <- paste0('<h3>', spcs2, '<b>', lower, '</b>', ' groups had a lower score', '</h3>')
@@ -569,13 +570,19 @@ scrsum_fun <- function(allgrpscr, grp){
   equal <- paste0('<h3>', spcs2, '<b>', equal, '</b>', ' groups had the same score', '</h3>')
   equal <- ifelse(grepl('One', equal), gsub('groups', 'group', equal), equal)
   
+  # fix to not show higher or lower text grade is top or bottom
+  if(totscr == grdlvs[1])
+    higher <- NULL
+  if(totscr == grdlvs[length(grdlvs)])
+    lower <- NULL
+  
   screxp <- 'The overall score is based on the average of the scores below for species abundance, blade length, and short shoot density. Each of these three scores is based on how close the reported values are to the overall averages ("true") across all groups participating in the transect training.  Reported values summarized for each species across all transects that deviate largely from the averages are given lower scores.  The overall score is then ranked relative to all other groups.'
   
   # ouput as list
   out <- paste0('
     <table>
       <tr>
-        <td>', totscr, higher, lower, equal, '</td>', 
+        <td>', tottxt, higher, lower, equal, '</td>', 
         '<td><h2><b>How are scores calculated?</b></h2><h4>', screxp, '</h4></td>',
       '</tr>
     </table>'
