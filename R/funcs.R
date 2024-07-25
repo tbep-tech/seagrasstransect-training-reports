@@ -572,12 +572,12 @@ allgrpscr_fun <- function(trndat, yr, truvar){
     tidyr::unnest(avediff) |>
     tidyr::pivot_wider(names_from = var, values_from = avediff) |> 
     dplyr::mutate(
-      dplyr::across(`Abundance`:`Short Shoot Density`, ~ scales::rescale(abs(.x), to = c(100, 65))),
+      dplyr::across(`Abundance`:`Short Shoot Density`, ~ scales::rescale(abs(.x), to = c(100, 50))),
       `Total` = (`Blade Length` + `Short Shoot Density` + `Abundance`) / 3
     )
 
-  grades <- c('A', 'A-', 'B+', 'B', 'B-', 'C+', 'C')
-  grdbrk <- c(101, 95, 90, 85, 80, 75, 70, 0)
+  grades <- c('A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D+', 'D')
+  grdbrk <- c(101, 95, 90, 85, 80, 75, 70, 65, 60, 55, 0)
 
   out <- scrs |> 
     dplyr::mutate(
@@ -594,7 +594,7 @@ allgrpscr_fun <- function(trndat, yr, truvar){
 #' @param grp character, group to summarize
 scrsum_fun <- function(allgrpscr, grp){
   
-  grdlvs <- c('A', 'A-', 'B+', 'B', 'B-', 'C+', 'C')
+  grdlvs <- c('A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D+', 'D')
   
   # group total scoreore
   totscr <- allgrpscr |> 
