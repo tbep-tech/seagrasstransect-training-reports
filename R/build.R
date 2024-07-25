@@ -4,7 +4,8 @@ source(here::here('R/funcs.R'))
 
 # get training data, all years ----------------------------------------------------------------
 
-trndat <- read_transect(training = TRUE)
+trndat <- read_transect(training = TRUE) |> 
+  dplyr::filter(Species %in% c('Halodule', 'Syringodium', 'Thalassia', 'Halophila', 'Ruppia'))
 
 save(trndat, file = here::here('data/trndat.rda'), compress = 'bzip2', version = 2)
 
@@ -21,7 +22,7 @@ purrr::walk(yrs, ~ proc_grp(trndat, .x, quiet = F))
 #   dplyr::filter(yr == !!yrs) |>
 #   dplyr::filter(grp == 'B')
 # 
-# proc_grp(trndattmp, yr, quiet = F)
+# proc_grp(trndattmp, yrs, quiet = F)
 
 # create index --------------------------------------------------------------------------------
 

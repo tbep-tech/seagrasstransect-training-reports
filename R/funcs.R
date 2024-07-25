@@ -146,14 +146,14 @@ truvar_fun <- function(trndat, yr){
       Abundance = round(mean(Abundance, na.rm = T), 0),
       `Blade Length` = mean(`Blade Length`, na.rm = T),
       `Short Shoot Density` = mean(`Short Shoot Density`, na.rm = T), 
-      .by = c(Site, Savspecies)
+      .by = c(Site, Species)
     ) |> 
     dplyr::mutate(
       Abundance = factor(Abundance, levels = seq_along(abulev), labels = abulev),
       Abundance = as.numeric(as.character(Abundance))
     ) |> 
     tidyr::pivot_longer(
-      cols = -c(Site, Savspecies),
+      cols = -c(Site, Species),
       names_to = 'var',
       values_to = 'truval'
     ) 
@@ -174,13 +174,13 @@ evalgrp_fun <- function(trndat, yr, grp, truvar){
   datyrgrp <- trndat |> 
     dplyr::filter(yr == !!yr) |> 
     dplyr::filter(grpact == !!grp) |> 
-    dplyr::select(Site, Depth, Savspecies, var, aveval)
+    dplyr::select(Site, Depth, Species, var, aveval)
   
   abulev <- c('0', '0.1', '0.5', '1', '2', '3', '4', '5')
   abulab <- c('no coverage', 'solitary', 'few', '<5%', '5-25%', '25-50%', '51-75%', '76-100%')
 
   out <- datyrgrp |> 
-    dplyr::full_join(truvar, by = c('Site', 'Savspecies', 'var')) |> 
+    dplyr::full_join(truvar, by = c('Site', 'Species', 'var')) |> 
     dplyr::filter(!(aveval == 0 & truval == 0)) |> 
     tidyr::pivot_longer(
       cols = c(aveval, truval),
@@ -212,7 +212,7 @@ evaltrntab_fun <- function(evalgrp){
   trucol <- '#958984'
   
   totab <- evalgrp |> 
-    dplyr::select(Site, Species = Savspecies, abuaveval = `Abundance aveval`, 
+    dplyr::select(Site, Species = Species, abuaveval = `Abundance aveval`, 
            abutruval = `Abundance truval`, blavenum = `Blade Length aveval`, 
            bltrunum = `Blade Length truval`,
            ssavenum = `Short Shoot Density aveval`, 
@@ -321,16 +321,16 @@ sppdiff_fun <- function(evalgrp, vr = c('Abundance', 'Blade Length', 'Short Shoo
 
     out <- out |> 
       dplyr::select(
-        Savspecies, 
+        Species, 
         aveval,
         truval
       ) |> 
-      dplyr::mutate(across(-Savspecies, as.numeric)) |>
+      dplyr::mutate(across(-Species, as.numeric)) |>
       dplyr::summarise(
         aveval = round(mean(aveval, na.rm = T), 0),
         sdtruv = round(sd(truval, na.rm = T), 0),
         truval = round(mean(truval, na.rm = T), 0),
-        .by = 'Savspecies'
+        .by = 'Species'
       ) |> 
       dplyr::mutate(
         avediff = aveval - truval
@@ -339,13 +339,13 @@ sppdiff_fun <- function(evalgrp, vr = c('Abundance', 'Blade Length', 'Short Shoo
   } else {
     
     out <- out |> 
-      dplyr::select(Savspecies, aveval, truval) |> 
-      dplyr::mutate(across(-Savspecies, as.numeric)) |>
+      dplyr::select(Species, aveval, truval) |> 
+      dplyr::mutate(across(-Species, as.numeric)) |>
       dplyr::summarise(
         aveval = ifelse(all(aveval == 0 | is.na(aveval)), NA, mean(aveval, na.rm = T)),
         sdtruv = ifelse(all(truval == 0 | is.na(truval)), NA, sd(truval, na.rm = T)),
         truval = ifelse(all(truval == 0 | is.na(truval)), NA, mean(truval, na.rm = T)), 
-        .by = 'Savspecies'
+        .by = 'Species'
       ) |> 
       dplyr::mutate(
         avediff = aveval - truval
@@ -354,8 +354,8 @@ sppdiff_fun <- function(evalgrp, vr = c('Abundance', 'Blade Length', 'Short Shoo
   }
   
   out <- out |> 
-    dplyr::mutate(dplyr::across(-Savspecies, \(x) round(x, 1))) |> 
-    dplyr::arrange(Savspecies)
+    dplyr::mutate(dplyr::across(-Species, \(x) round(x, 1))) |> 
+    dplyr::arrange(Species)
   
   return(out)
   
@@ -413,13 +413,13 @@ card_fun <- function(evalgrp, grp, allgrpscr, vr = c('Abundance', 'Blade Length'
         avediff == 'not recorded' ~ avediff,
         T ~ paste(sgndff, avediff, ' ', vruni, ' across transects', sep = '')
       ),
-      Savspecies = paste0('<i><b>', Savspecies, '</b></i>')
+      Species = paste0('<i><b>', Species, '</b></i>')
     ) |> 
-    tidyr::unite('Savspecies', Savspecies, avediff, sep = ' ') |>
+    tidyr::unite('Species', Species, avediff, sep = ' ') |>
     dplyr::mutate(
-      Savspecies = paste0('<span>', Savspecies, '</span>')
+      Species = paste0('<span>', Species, '</span>')
     ) |> 
-    dplyr::pull(Savspecies) |> 
+    dplyr::pull(Species) |> 
     paste0(collapse = '</p><p>')
   spptxt < paste0('<p>', spptxt, '</p>')
   
@@ -427,8 +427,8 @@ card_fun <- function(evalgrp, grp, allgrpscr, vr = c('Abundance', 'Blade Length'
   sppdiff <- sppdiff |> 
     dplyr::filter(!is.na(aveval)) |> 
     dplyr::mutate(
-      Savspecies = factor(Savspecies), 
-      Savnum = as.numeric(Savspecies)
+      Species = factor(Species), 
+      Savnum = as.numeric(Species)
     )
   
   # barplot y axis and hover text differs if abundance or not
@@ -473,7 +473,7 @@ card_fun <- function(evalgrp, grp, allgrpscr, vr = c('Abundance', 'Blade Length'
     ) |>
     plotly::config(displayModeBar = F) |> 
     plotly::layout(
-      xaxis = list(title = '', ticktext = levels(sppdiff$Savspecies), tickvals = sppdiff$Savnum),
+      xaxis = list(title = '', ticktext = levels(sppdiff$Species), tickvals = sppdiff$Savnum),
       yaxis = yxs,
       showlegend = F
     ) |> 
