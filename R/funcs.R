@@ -327,7 +327,8 @@ sppdiff_fun <- function(evalgrp, vr = c('Abundance', 'Blade Length', 'Short Shoo
       ) |> 
       dplyr::mutate(across(-Savspecies, as.numeric)) |>
       dplyr::summarise(
-        aveval = round(mean(aveval, na.rm = T), 0), 
+        aveval = round(mean(aveval, na.rm = T), 0),
+        sdtruv = round(sd(truval, na.rm = T), 0),
         truval = round(mean(truval, na.rm = T), 0),
         .by = 'Savspecies'
       ) |> 
@@ -342,6 +343,7 @@ sppdiff_fun <- function(evalgrp, vr = c('Abundance', 'Blade Length', 'Short Shoo
       dplyr::mutate(across(-Savspecies, as.numeric)) |>
       dplyr::summarise(
         aveval = ifelse(all(aveval == 0 | is.na(aveval)), NA, mean(aveval, na.rm = T)),
+        sdtruv = ifelse(all(truval == 0 | is.na(truval)), NA, sd(truval, na.rm = T)),
         truval = ifelse(all(truval == 0 | is.na(truval)), NA, mean(truval, na.rm = T)), 
         .by = 'Savspecies'
       ) |> 
@@ -452,7 +454,9 @@ card_fun <- function(evalgrp, grp, allgrpscr, vr = c('Abundance', 'Blade Length'
       name = 'True value',
       text = hovtxttr,
       hoverinfo = 'text',
-      textposition = 'none'
+      textposition = 'none', 
+      error_y = ~list(array = sdtruv,
+                      color = 'grey', width = 0)
     ) |> 
     plotly::add_segments(
       data = sppdiff,
