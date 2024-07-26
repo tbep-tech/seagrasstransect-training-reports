@@ -134,11 +134,9 @@ truvar_fun <- function(trndat, yr){
   
   abulev <- c('0', '0.1', '0.5', '1', '2', '3', '4', '5')
   abulab <- c('no coverage', 'solitary', 'few', '<5%', '5-25%', '25-50%', '51-75%', '76-100%')
-  savspecies <- c('Halodule', 'Syringodium', 'Thalassia', 'Halophila', 'Ruppia')
   
   out <- trndat |> 
     dplyr::filter(yr == !!yr) |>
-    dplyr::filter(Species %in% savspecies) |> 
     tidyr::pivot_wider(names_from = var, values_from = aveval) |>
     dplyr::mutate(
       Abundance = factor(Abundance, levels = abulev), 
@@ -173,15 +171,13 @@ truvar_fun <- function(trndat, yr){
 #' @return data frame of group data compard to "true" values
 evalgrp_fun <- function(trndat, yr, grp, truvar){
   
-  savspecies <- c('Halodule', 'Syringodium', 'Thalassia', 'Halophila', 'Ruppia')
   abulev <- c('0', '0.1', '0.5', '1', '2', '3', '4', '5')
   abulab <- c('no coverage', 'solitary', 'few', '<5%', '5-25%', '25-50%', '51-75%', '76-100%')
   
   datyrgrp <- trndat |> 
     dplyr::filter(yr == !!yr) |> 
-    dplyr::filter(Species %in% savspecies) |> 
     dplyr::filter(grpact == !!grp) |> 
-    dplyr::select(Site, Depth, Species, var, aveval)
+    dplyr::select(Site, Species, var, aveval)
 
   out <- datyrgrp |> 
     dplyr::full_join(truvar, by = c('Site', 'Species', 'var')) |> 
@@ -315,7 +311,10 @@ sppdiff_fun <- function(evalgrp, vr = c('Abundance', 'Blade Length', 'Short Shoo
   
   vr <- match.arg(vr)
   
+  savspecies <- c('Halodule', 'Syringodium', 'Thalassia', 'Halophila', 'Ruppia')
+  
   out <- evalgrp |> 
+    dplyr::filter(Species %in% savspecies) |>
     dplyr::rename(
       aveval = paste(vr, 'aveval'),
       truval = paste(vr, 'truval')
@@ -521,11 +520,8 @@ card_fun <- function(evalgrp, grp, allgrpscr, vr = c('Abundance', 'Blade Length'
 #' @param truvar data frame "true" values from training data for a given year
 allgrpscr_fun <- function(trndat, yr, truvar){
 
-  savspecies <- c('Halodule', 'Syringodium', 'Thalassia', 'Halophila', 'Ruppia')
-  
   scrs <- trndat |> 
     dplyr::filter(yr == !!yr) |> 
-    dplyr::filter(Species %in% savspecies) |> 
     dplyr::select(grpact) |> 
     dplyr::distinct() |> 
     dplyr::group_nest(grpact, .key = 'evalgrp') |> 
