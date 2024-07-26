@@ -87,10 +87,21 @@ scrimp_fun(allgrpscr, grp, 'Short Shoot Density')
 
 ## Row {height=50%}
 
-::: {.card title='Species identification'}
-[![](images/sppguide.png)](https://drive.google.com/file/d/1naZpND_Ur90abqND-ZhZ_fJtBBiuetjt/view)
-:::
+```{r}
+#| title: "Seagrass identification"
+sppimp_fun(evalgrp, 'seagrass')
+```
 
-::: {.card title='Web portal'}
-{{< video https://www.youtube.com/embed/cF9VluXSq0E?si=TnnovjUuiZTSzCj_ >}}
+```{r}
+#| title: "Macroalgae identification"
+sppimp_fun(evalgrp, 'macroalgae') 
+```
+
+::: {.card title="Additional resources"}
+* [Seagrass Transect Training: Protocols](https://youtu.be/jfnVlIjJ-o4?si=xSyZtFT_8h96j7gu){target="_blank"}
+* [Seagrass Transect Training: Web Portal](https://youtu.be/cF9VluXSq0E?si=f4nz5_Ju4_yPnJI0){target="_blank"}
+* [Species Identification Guide](https://drive.google.com/file/d/1naZpND_Ur90abqND-ZhZ_fJtBBiuetjt/view){target="_blank"}
+* [Web Portal](https://dev.seagrass.wateratlas.usf.edu/){target="_blank"}
+* [Water Atlas Seagrass Page](https://tampabay.wateratlas.usf.edu/seagrass-monitoring/){target="_blank"}
+* [Seagrass Transect Dashboard](https://shiny.tbep.org/seagrasstransect-dash){target="_blank"}
 :::

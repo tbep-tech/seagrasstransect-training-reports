@@ -311,10 +311,8 @@ sppdiff_fun <- function(evalgrp, vr = c('Abundance', 'Blade Length', 'Short Shoo
   
   vr <- match.arg(vr)
   
-  savspecies <- c('Halodule', 'Syringodium', 'Thalassia', 'Halophila', 'Ruppia')
-  
   out <- evalgrp |> 
-    dplyr::filter(Species %in% savspecies) |>
+    dplyr::filter(Species %in% savspecies()) |>
     dplyr::rename(
       aveval = paste(vr, 'aveval'),
       truval = paste(vr, 'truval')
@@ -669,4 +667,61 @@ troph_fun <- function(scr){
 
   return(out)
 
+}
+
+#' Get text summary of how to improve species id
+#'
+#' @param evalgrp data frame as returned by \code{\link{evalgrp_fun}}
+#' @param spp character, species to summarize
+sppimp_fun <- function(evalgrp, spp = c('seagrass', 'macroalgae')){
+  
+  lnk <- 'https://drive.google.com/file/d/1naZpND_Ur90abqND-ZhZ_fJtBBiuetjt/view'
+  
+  spp <- match.arg(spp)
+
+  if(spp == 'seagrass')
+    sppid <- evalgrp |> 
+      dplyr::filter(Species %in% savspecies()) 
+  
+  if(spp == 'macroalgae')
+    sppid <- evalgrp |> 
+      dplyr::filter(!Species %in% savspecies())
+
+  sppmiss <- sppid |> 
+    dplyr::filter(is.na(`Abundance aveval`)) |> 
+    dplyr::select(Species) |> 
+    dplyr::distinct()
+  
+  txtout <- 'All species found, good job!'
+  if(nrow(sppmiss) > 0){
+    
+    sppmiss <- sppmiss |> 
+      dplyr::pull(Species) |> 
+      sort()
+    
+    nmiss <- 'a few'
+    if(length(sppmiss) == 1)
+      nmiss <- 'one'
+ 
+    sppmiss <- sppmiss |> 
+      paste(collapse = ', ')
+    
+    txtout <- paste0('Missed ', nmiss, ' (', sppmiss, ')! Check out the species guide at the link <a target="_blank" href="', lnk, '">here</a>.')
+    
+  }
+    
+  out <- paste0('<span><h4>', txtout, '</h4></span>')
+  out <- gt::html(out)
+  
+  return(out)
+  
+}
+
+#' Get character vector of sav species for filtering
+savspecies <- function(){
+  
+  out <- c('Halodule', 'Syringodium', 'Thalassia', 'Halophila', 'Ruppia')
+  
+  return(out)
+  
 }

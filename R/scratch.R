@@ -13,7 +13,7 @@ allgrpscr <- allgrpscr_fun(trndat, yr, truvar)
 
 evalgrp <- evalgrp_fun(trndat, yr, grp, truvar)
 
-# evaltrntab_fun(evalgrp)
+evaltrntab_fun(evalgrp)
 
 card_fun(evalgrp, grp, allgrpscr, 'Abundance')
 
@@ -21,3 +21,4 @@ scrsum_fun(allgrpscr, grp)
 
 scrimp_fun(allgrpscr, grp, 'Abundance')
 
+sppimp_fun(evalgrp, 'macroalgae')
