@@ -3,9 +3,9 @@ data(trndat)
 
 source(here::here('R/funcs.R'))
 
-yr <- 2024
+yr <- 2023
 
-grp <- "2024: FWRI (SS, AP, MW, SH, LB, BH)"
+grp <- "2023: EPCHC (Campbell, Kevin)"
 
 truvar <- truvar_fun(trndat, yr)
 
@@ -15,7 +15,7 @@ evalgrp <- evalgrp_fun(trndat, yr, grp, truvar)
 
 evaltrntab_fun(evalgrp)
 
-card_fun(evalgrp, grp, allgrpscr, 'Abundance')
+card_fun(evalgrp, grp, allgrpscr, 'Blade Length')
 
 scrsum_fun(allgrpscr, grp)
 

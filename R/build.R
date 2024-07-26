@@ -13,16 +13,16 @@ save(trndat, file = here::here('data/trndat.rda'), compress = 'bzip2', version =
 
 data(trndat)
 
-yrs <- 2024
-# yrs <- unique(trndat$yr)
+# yrs <- 2024
+yrs <- unique(trndat$yr)
 
-# purrr::walk(yrs, ~ proc_grp(trndat, .x, quiet = F))
+purrr::walk(yrs, ~ proc_grp(trndat, .x, quiet = F))
 
-trndattmp <- trndat |>
-  dplyr::filter(yr == !!yrs) |>
-  dplyr::filter(grp == 'B')
-
-proc_grp(trndattmp, yrs, quiet = F)
+# trndattmp <- trndat |>
+#   dplyr::filter(yr == !!yrs) |>
+#   dplyr::filter(grp == 'B')
+# 
+# proc_grp(trndattmp, yrs, quiet = F)
 
 # create index --------------------------------------------------------------------------------
 
