@@ -338,8 +338,12 @@ sppdiff_fun <- function(evalgrp, vr = c('Abundance', 'Blade Length', 'Short Shoo
       )
     
   } else {
-    
+
     out <- out |> 
+      dplyr::filter(
+        sum(!is.na(truval)) > 0, # remove species where short shoot or blade length is not measured
+        .by = Species
+      ) |>
       dplyr::select(Species, aveval, truval) |> 
       dplyr::mutate(across(-Species, as.numeric)) |>
       dplyr::summarise(
