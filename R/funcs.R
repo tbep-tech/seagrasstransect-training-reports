@@ -68,7 +68,7 @@ proc_grp <- function(trndat, yr, quiet = F){
       input = here::here('template.qmd'),
       execute_params = params,
       output_file = outputfl, 
-      quiet = T
+      quiet = quiet
     )
     
     file.rename(
