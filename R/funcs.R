@@ -99,7 +99,7 @@ writeindex_fun <- function(trndat){
     dplyr::mutate( 
       grpact = unique(trndat$grpact[trndat$yr == yr & trndat$grp == grp]), 
       grpact = gsub('^\\d{4}: ', '', grpact),
-      grphtml = paste0('<li><a href="', fls, '">', grpact, '</a></li>')
+      grphtml = paste0('<li><a href="', fls, '" target="_blank">', grpact, '</a></li>')
     ) |> 
     dplyr::ungroup() |> 
     dplyr::arrange(yr, grp) |> 
