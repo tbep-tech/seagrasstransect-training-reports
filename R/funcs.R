@@ -334,7 +334,8 @@ sppdiff_fun <- function(evalgrp, vr = c('Abundance', 'Blade Length', 'Short Shoo
         .by = 'Species'
       ) |> 
       dplyr::mutate(
-        avediff = aveval - truval
+        avediff = aveval - truval,
+        aveperc = ifelse(truval == 0, NA, (aveval - truval) / ((aveval + truval) / 2))
       )
     
   } else {
@@ -353,7 +354,8 @@ sppdiff_fun <- function(evalgrp, vr = c('Abundance', 'Blade Length', 'Short Shoo
         .by = 'Species'
       ) |> 
       dplyr::mutate(
-        avediff = aveval - truval
+        avediff = aveval - truval, 
+        aveperc = ifelse(truval == 0, NA, (aveval - truval) / ((aveval + truval) / 2))
       )
     
   }
@@ -361,7 +363,7 @@ sppdiff_fun <- function(evalgrp, vr = c('Abundance', 'Blade Length', 'Short Shoo
   out <- out |> 
     dplyr::mutate(dplyr::across(-Species, \(x) round(x, 1))) |> 
     dplyr::arrange(Species)
-  
+
   return(out)
   
 }
@@ -534,8 +536,11 @@ allgrpscr_fun <- function(trndat, yr, truvar){
     dplyr::mutate(
       avediff = purrr::pmap(list(evalgrp, var), function(evalgrp, var){
         sppdiff_fun(evalgrp, var) |> 
+          dplyr::mutate(
+            sdtruv = ifelse(is.na(sdtruv), 0, sdtruv)
+          ) |> 
           dplyr::summarise(
-            avediff = mean(abs(avediff), na.rm = T)
+            avediff = weighted.mean(abs(avediff), 1 / (1 + sdtruv), na.rm = T)
           ) |> 
           dplyr::pull(avediff)
       })
@@ -610,7 +615,7 @@ scrsum_fun <- function(allgrpscr, grp){
   if(totscr == grdlvs[length(grdlvs)])
     lower <- NULL
   
-  screxp <- 'The overall score is based on the average of the scores below for species abundance, blade length, and short shoot density. Each of these three scores is based on how close the reported values are to the overall averages ("true") across all groups participating in the transect training.  Reported values summarized for each species across all transects that deviate largely from the averages are given lower scores.  The overall score is then ranked relative to all other groups.'
+  screxp <- 'The overall score is based on a ranking relative to all other gruops. The overall score is based on the average of the scores below for species abundance, blade length, and short shoot density. Each of these three scores is based on how close the reported values are to the overall averages ("true") across all groups participating in the transect training.  Reported values summarized for each species across all transects that deviate largely from the averages are given lower scores.  What is defined as "a lot" or "a little" deviation from the average varies by the measure. For example, smaller deviations from the average will be given lower scores if all groups scored similarly for a particular measure.'
   
   # ouput as list
   out <- paste0('
