@@ -65,7 +65,8 @@ allyrscrplo_fun <- function(allyrscrs, grpsel){
         x = ~yr, 
         y = ~round(scr, 1),
         marker = list(color = "#1f77b4"),
-        showlegend = FALSE
+        showlegend = FALSE,
+        name = "Score",
       ) #|>
     # plotly::add_lines(
     #   data = plot_data,

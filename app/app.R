@@ -2,6 +2,7 @@ library(shiny)
 library(bslib)
 library(dplyr)
 library(plotly)
+library(munsell)
 
 # Source your functions (uncomment when using with your actual setup)
 source('R/funcs.R')
