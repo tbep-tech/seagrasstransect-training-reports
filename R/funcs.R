@@ -522,7 +522,8 @@ card_fun <- function(evalgrp, grp, allgrpscr, vr = c('Abundance', 'Blade Length'
 #' @param trndat data frame of all seagrass transect training data
 #' @param yr integer, year
 #' @param truvar data frame "true" values from training data for a given year
-allgrpscr_fun <- function(trndat, yr, truvar){
+#' @param raw logical, return raw scores, otherwise letter grades
+allgrpscr_fun <- function(trndat, yr, truvar, raw = F){
 
   scrs <- trndat |> 
     dplyr::filter(yr == !!yr) |> 
@@ -553,6 +554,9 @@ allgrpscr_fun <- function(trndat, yr, truvar){
       `Total` = (`Blade Length` + `Short Shoot Density` + `Abundance`) / 3
     )
 
+  if(raw)
+    return(scrs)
+  
   grades <- c('A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D+', 'D')
   grdbrk <- c(101, 95, 90, 85, 80, 75, 70, 65, 60, 55, 0)
 
@@ -730,6 +734,62 @@ sppimp_fun <- function(evalgrp, spp = c('seagrass', 'macroalgae')){
 savspecies <- function(){
   
   out <- c('Halodule', 'Syringodium', 'Thalassia', 'Halophila', 'Ruppia')
+  
+  return(out)
+  
+}
+
+#' Get all grades for groups over time
+#' 
+#' @param trndat data frame, transect training data
+#' @param na.rm logical, remove groups with no affiliation from results
+#' @param usemon logical, return only groups that are within tbeptools::trnlns
+#' 
+#' @details some years have mroe than one group participating, e.g., two SWFWMD groups, scores are averaged in these cases
+allyrscr_fun <- function(trndat, na.rm = T, usemon = TRUE){
+  
+  data(file = 'trnlns', package = 'tbeptools')
+  
+  grades <- c('A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D+', 'D')
+  grdbrk <- c(101, 95, 90, 85, 80, 75, 70, 65, 60, 55, 0)
+  
+  yrs <- unique(trndat$yr)
+  
+  out <- tibble::tibble(yr = yrs) |> 
+    dplyr::group_nest(yr) |> 
+    dplyr::mutate(
+      data = purrr::map(yr, function(x){
+        
+        truvar <- truvar_fun(trndat, x)
+        
+        out <- allgrpscr_fun(trndat, x, truvar, raw = T)
+        
+        return(out)
+        
+      })
+    ) |> 
+    tidyr::unnest('data') |> 
+    tidyr::pivot_longer(cols = c(Abundance:Total),
+                 names_to = 'var',
+                 values_to = 'scr') |> 
+    dplyr::mutate(
+      grp = gsub('^.*:\\s(.*?)\\s\\(.*$', '\\1', grpact)
+    ) |> 
+    dplyr::summarise(
+      scr = mean(scr, na.rm = T), 
+      .by = c(yr, grp, var)
+    ) |> 
+    dplyr::mutate(
+      grd = as.character(cut(-scr, breaks = -grdbrk, labels = grades))
+    )
+  
+  if(na.rm)
+    out <- out |> 
+      dplyr::filter(!grp %in% 'NA') 
+  
+  if(usemon)
+    out <- out |> 
+      dplyr::filter(grp %in% tbeptools::trnlns$MonAgency)
   
   return(out)
   

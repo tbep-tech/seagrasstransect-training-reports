@@ -25,6 +25,14 @@ purrr::walk(yrs, ~ proc_grp(trndat, .x, quiet = F))
 # 
 # proc_grp(trndattmp, yrs, quiet = F)
 
+# get all group scores across years -----------------------------------------------------------
+
+data(trndat)
+
+allyrscrs <- allyrscr_fun(trndat)
+
+save(allyrscrs, file = here::here("app/data/allyrscrs.RData"))
+
 # create index --------------------------------------------------------------------------------
 
 data(trndat)
