@@ -84,9 +84,8 @@ proc_grp <- function(trndat, yr, quiet = F){
 #' @param trndata data frame of transect training data
 writeindex_fun <- function(trndat){
   
-  fls <- list.files(here::here('docs'), full.names = F)
-  fls <- fls[!grepl('index.html', fls)]
-  
+  fls <- list.files(here::here('docs'), pattern = '\\d\\.html$', full.names = F)
+
   # create html string for lists by year and group
   flsdf <- tibble::tibble(
     fls = fls

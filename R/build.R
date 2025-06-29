@@ -6,7 +6,7 @@ source(here::here('R/funcs.R'))
 
 trndat <- read_transect(training = TRUE) |> 
   dplyr::filter(!Species %in% 'No Cover') |> 
-  dplyr::filter(!is.na(aveval)) # aveval entries as NA will break report generation
+  dplyr::filter(!anyNA(aveval), .by = c(yr, grp, Site, Species)) # aveval entries as NA will break report generation, this also removes blade length and short shoot density that have entries where abundance is NA for the species
 
 save(trndat, file = here::here('data/trndat.rda'), compress = 'bzip2', version = 2)
 
@@ -38,3 +38,8 @@ save(allyrscrs, file = here::here("app/data/allyrscrs.RData"))
 data(trndat)
 
 writeindex_fun(trndat)
+
+# build dashboard -----------------------------------------------------------------------------
+
+shinylive::export('app', 'docs/app')
+# httpuv::runStaticServer("docs/app") # test
