@@ -119,7 +119,7 @@ writeindex_fun <- function(trndat){
     paste0(collapse = '') 
   
   # add html header tags
-  towrt <- paste0('<html>\n<body>\n<h1>Transect training report cards</h1>\n', flsdf, '</body>\n</html>')
+  towrt <- paste0('<html>\n<body>\n<h1>Transect training report cards</h1>\n<a href="https://tbep-tech.github.io/seagrasstransect-training-reports/app" target="_blank">Dashboard summary</a>\n', flsdf, '</body>\n</html>')
   
   # write output
   writeLines(towrt, con = here::here('docs/index.html'))
@@ -619,7 +619,7 @@ scrsum_fun <- function(allgrpscr, grp){
   if(totscr == grdlvs[length(grdlvs)])
     lower <- NULL
   
-  screxp <- 'The overall score is based on a ranking relative to all other gruops. The overall score is based on the average of the scores below for species abundance, blade length, and short shoot density. Each of these three scores is based on how close the reported values are to the overall averages ("true") across all groups participating in the transect training.  Reported values summarized for each species across all transects that deviate largely from the averages are given lower scores.  What is defined as "a lot" or "a little" deviation from the average varies by the measure. For example, smaller deviations from the average will be given lower scores if all groups scored similarly for a particular measure.'
+  screxp <- 'The overall score is based on a ranking relative to all other groups. The overall score is based on the average of the scores below for species abundance, blade length, and short shoot density. Each of these three scores is based on how close the reported values are to the overall averages ("true") across all groups participating in the transect training.  Reported values summarized for each species across all transects that deviate largely from the averages are given lower scores.  What is defined as "a lot" or "a little" deviation from the average varies by the measure. For example, smaller deviations from the average will be given lower scores if all groups scored similarly for a particular measure.'
   
   # ouput as list
   out <- paste0('
