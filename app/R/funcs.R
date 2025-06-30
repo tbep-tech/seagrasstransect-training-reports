@@ -21,7 +21,7 @@ allyrscrplo_fun <- function(allyrscrs, grpsel){
                     "rgba(255,204,0,0.3)", "rgba(255,153,0,0.3)", "rgba(255,102,0,0.3)", "rgba(255,0,0,0.3)")
   
   # Get unique variables for faceting
-  vars <- unique(toplo$var)
+  vars <- c('Total', 'Abundance', 'Blade Length', 'Short Shoot Density')
   
   # Create subplot function
   create_subplot <- function(var_name, data) {
@@ -36,7 +36,7 @@ allyrscrplo_fun <- function(allyrscrs, grpsel){
     for(i in 1:length(grades)) {
       p <- p |> 
         plotly::add_ribbons(
-          x = c(min(plot_data$yr) - 10, max(plot_data$yr) + 10),
+          x = c(min(allyrscrs$yr) - 1, max(allyrscrs$yr) + 1),
           ymin = grade_breaks[i+1], 
           ymax = grade_breaks[i],
           fillcolor = grade_colors[i],
@@ -50,7 +50,7 @@ allyrscrplo_fun <- function(allyrscrs, grpsel){
     # Add trend line (linear regression)
     lm_model <- lm(scr ~ yr, data = plot_data)
     trend_line <- predict(lm_model, newdata = data.frame(yr = plot_data$yr))
-    
+
     p <- p |>
       plotly::add_lines(
         data = plot_data,
@@ -58,16 +58,26 @@ allyrscrplo_fun <- function(allyrscrs, grpsel){
         y = trend_line,
         line = list(color = "#1f77b4", dash = "solid"),
         name = "Trend",
-        showlegend = FALSE
+        showlegend = FALSE,
+        hovertemplate = paste0("<b>Trend</b><br>",
+                               "Year: %{x}<br>",
+                               "Estimate: %{y:.1f}<br>",
+                               "<extra></extra>")
       ) |>
       plotly::add_markers(
         data = plot_data,
         x = ~yr, 
-        y = ~round(scr, 1),
+        y = ~scr,
         marker = list(color = "#1f77b4", line = list(color = "#1f77b4")),
         size = 4,
         showlegend = FALSE,
         name = "Score",
+        hovertemplate = paste0("<b>Training Score</b><br>",
+          "Year: %{x}<br>",
+          "Score: %{y:.1f}<br>",
+          "Grade: %{customdata}<br>",
+          "<extra></extra>"),
+        customdata = ~grd 
       ) #|>
     # plotly::add_lines(
     #   data = plot_data,
@@ -96,6 +106,10 @@ allyrscrplo_fun <- function(allyrscrs, grpsel){
       )
     }
     
+    ylab <- paste(var_name, "Score")
+    if(var_name == 'Total')
+      ylab <- paste0('<b>', ylab, '</b>')
+    
     p <- p |>
       plotly::layout(
         xaxis = list(
@@ -106,7 +120,7 @@ allyrscrplo_fun <- function(allyrscrs, grpsel){
           fixedrange = T
         ),
         yaxis = list(
-          title = paste(var_name, "Score"),
+          title = ylab,
           side = "left", 
           range = c(48, 102), 
           fixedrange = T
@@ -124,6 +138,7 @@ allyrscrplo_fun <- function(allyrscrs, grpsel){
   out <- plotly::subplot(
       plot_list, 
       nrows = length(vars), 
+      titleY = T,
       heights = c(0.23, 0.25, 0.25, 0.23)#rep(1/length(vars), length(vars))
     ) |> 
     plotly::config(
