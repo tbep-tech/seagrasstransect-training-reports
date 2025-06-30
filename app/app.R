@@ -31,175 +31,13 @@ ui <- page_sidebar(
   
   # Custom CSS for TBEP branding and styling
   tags$head(
-    tags$link(href = "https://fonts.googleapis.com/css2?family=Rubik:wght@500;600;700&display=swap", rel = "stylesheet"),
-    tags$link(href = "https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap", rel = "stylesheet"),
-    tags$style(HTML("
-      /* TBEP Authentic Color Scheme */
-      :root {
-        --tbep-primary: #005293;
-        --tbep-teal: #00806E;
-        --tbep-orange: #db5b25;
-        --tbep-orange-hover: #f57d05;
-        --tbep-yellow: #F0AD4E;
-        --tbep-yellow-active: #ea6f17;
-        --tbep-gray: #636363;
-        --tbep-light-gray: #958984;
-        --tbep-bg-gray: #95898430;
-      }
-      
-      /* TBEP Typography */
-      body {
-        font-family: 'Roboto', sans-serif;
-        font-weight: 400;
-        font-size: 18px;
-        color: var(--tbep-gray);
-      }
-      
-      h1, h2, h3, h4, h5, h6 {
-        font-weight: 500;
-        color: var(--tbep-primary);
-        font-family: 'Rubik', Helvetica, Arial, Lucida, sans-serif;
-      }
-      
-      h1 { font-size: 40px; }
-      h2 { font-size: 32px; }
-      h3 { font-size: 24px; }
-      h4 { font-size: 18px; }
-      h5 { font-size: 16px; }
-      h6 { font-size: 14px; }
-      
-      /* Links */
-      a {
-        color: var(--tbep-orange);
-        font-family: 'Roboto', Helvetica, Arial, Lucida, sans-serif;
-        font-weight: 500;
-        text-decoration: none;
-      }
-      
-      a:visited {
-        color: var(--tbep-orange);
-      }
-      
-      a:hover {
-        color: var(--tbep-orange-hover);
-      }
-      
-      /* Sidebar styling */
-      .bslib-sidebar-layout > .sidebar {
-        background-color: var(--tbep-bg-gray);
-        color: var(--tbep-light-gray);
-        border-radius: 8px;
-        font-family: 'Roboto', sans-serif;
-        font-weight: 300;
-      }
-      
-      .bslib-sidebar-layout > .sidebar h4 {
-        color: var(--tbep-primary);
-        font-family: 'Rubik', Helvetica, Arial, Lucida, sans-serif;
-        font-weight: 500;
-      }
-      
-      .bslib-sidebar-layout > .sidebar h6 {
-        color: var(--tbep-light-gray);
-        font-family: 'Roboto', sans-serif;
-        font-weight: 300;
-      }
-      
-      /* Form controls */
-      .bslib-sidebar-layout > .sidebar .form-control {
-        font-family: 'Roboto', sans-serif;
-        font-weight: 300;
-        color: var(--tbep-gray);
-      }
-      
-      .bslib-sidebar-layout > .sidebar .control-label {
-        font-family: 'Roboto', sans-serif;
-        font-weight: 300;
-        color: var(--tbep-light-gray);
-      }
-      
-      /* Select dropdown styling */
-      .selectize-dropdown .option.selected {
-        background: var(--tbep-teal) !important;
-      }
-      
-      /* Button styling */
-      .btn-outline-secondary {
-        color: var(--tbep-teal);
-        border-color: var(--tbep-teal);
-        font-family: 'Roboto', sans-serif;
-        font-weight: 300;
-      }
-      
-      .btn-outline-secondary:hover {
-        background-color: var(--tbep-teal);
-        border-color: var(--tbep-teal);
-        color: white;
-      }
-      
-      /* Main content styling */
-      .main h3 {
-        color: var(--tbep-primary);
-        font-family: 'Rubik', Helvetica, Arial, Lucida, sans-serif;
-        font-weight: 500;
-      }
-      
-      .lead {
-        color: var(--tbep-gray);
-        font-family: 'Roboto', sans-serif;
-        font-weight: 300;
-      }
-      
-      /* Plot container */
-      .plot-container {
-        background: white;
-        border: 1px solid #E5E5E5;
-        border-radius: 8px;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-      }
-      
-      /* Custom scrollbar to match TBEP colors */
-      .plot-container::-webkit-scrollbar {
-        width: 8px;
-      }
-      
-      .plot-container::-webkit-scrollbar-track {
-        background: #E5E5E5;
-        border-radius: 4px;
-      }
-      
-      .plot-container::-webkit-scrollbar-thumb {
-        background: var(--tbep-teal);
-        border-radius: 4px;
-      }
-      
-      .plot-container::-webkit-scrollbar-thumb:hover {
-        background: var(--tbep-primary);
-      }
-      
-      /* Text colors */
-      .text-primary {
-        color: var(--tbep-primary) !important;
-      }
-      
-      .text-muted {
-        color: var(--tbep-light-gray) !important;
-      }
-      
-      /* Small text styling */
-      .small {
-        font-family: 'Roboto', sans-serif;
-        font-weight: 300;
-        color: var(--tbep-light-gray);
-      }
-    "))
-    
+    tags$link(rel = 'stylesheet', type = 'text/css', href = 'styles.css')
     ),
     
   # Sidebar with controls
   sidebar = sidebar(
     title = "Controls",
-    width = 500,
+    width = 600,
     
     selectInput(
       inputId = "group_select",
@@ -238,10 +76,10 @@ ui <- page_sidebar(
   
   # Main content area
   div(
-    style = "height: calc(100vh - 100px); overflow-y: auto; border: 1px solid #dee2e6; border-radius: 0.375rem; padding: 1rem; background-color: white;",
+    style = "height: calc(100vh - 100px); overflow-y: auto; padding: 1rem; background-color: white;",
     plotlyOutput(
       outputId = "score_plot",
-      height = "900px"
+      height = "1000px"
     )
   )
 )

@@ -101,12 +101,14 @@ allyrscrplo_fun <- function(allyrscrs, grpsel){
           title = '',
           range = c(min(allyrscrs$yr) - 0.1, max(allyrscrs$yr) + 0.2), 
           dtick = 1, 
-          tickmode = 'linear'
+          tickmode = 'linear', 
+          fixedrange = T
         ),
         yaxis = list(
           title = paste(var_name, "Score"),
           side = "left", 
-          range = c(50, 100)
+          range = c(50, 100), 
+          fixedrange = T
         ),
         annotations = annotations
       )
@@ -116,15 +118,17 @@ allyrscrplo_fun <- function(allyrscrs, grpsel){
   
   # Create individual plots for each variable
   plot_list <- lapply(vars, function(var) create_subplot(var, toplo))
-  
+
   # Combine into subplots (vertical arrangement)
   out <- plotly::subplot(
-    plot_list, 
-    nrows = length(vars), 
-    shareX = TRUE,
-    titleY = TRUE,
-    heights = rep(1/length(vars), length(vars))
-  )
+      plot_list, 
+      nrows = length(vars), 
+      heights = c(0.22, 0.25, 0.25, 0.22)#rep(1/length(vars), length(vars))
+    ) |> 
+    plotly::config(
+      displaylogo = F, 
+      modeBarButtonsToRemove = c("sendDataToCloud", "editInChartStudio", "zoom2d", "select2d", "lasso2d", "autoScale2d", "resetScale2d", "pan2d", "zoomIn2d", "zoomOut2d")
+    )
   
   return(out)
   
