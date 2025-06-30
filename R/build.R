@@ -42,4 +42,4 @@ writeindex_fun(trndat)
 # build dashboard -----------------------------------------------------------------------------
 
 shinylive::export('app', 'docs/app')
-# httpuv::runStaticServer("docs/app") # test
+httpuv::runStaticServer("docs/app") # test

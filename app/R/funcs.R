@@ -9,7 +9,7 @@ allyrscrplo_fun <- function(allyrscrs, grpsel){
   
   # Define grade breaks and colors using your specific grading system
   grades <- c('A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D+', 'D')
-  grdbrk <- c(110, 95, 90, 85, 80, 75, 70, 65, 60, 55, 40)
+  grdbrk <- c(100, 95, 90, 85, 80, 75, 70, 65, 60, 55, 50)
   
   # Convert 101 to max value and 0 to min value for plotly
   grade_breaks <- grdbrk
@@ -64,7 +64,8 @@ allyrscrplo_fun <- function(allyrscrs, grpsel){
         data = plot_data,
         x = ~yr, 
         y = ~round(scr, 1),
-        marker = list(color = "#1f77b4"),
+        marker = list(color = "#1f77b4", line = list(color = "#1f77b4")),
+        size = 4,
         showlegend = FALSE,
         name = "Score",
       ) #|>
@@ -107,7 +108,7 @@ allyrscrplo_fun <- function(allyrscrs, grpsel){
         yaxis = list(
           title = paste(var_name, "Score"),
           side = "left", 
-          range = c(50, 100), 
+          range = c(48, 102), 
           fixedrange = T
         ),
         annotations = annotations
@@ -123,7 +124,7 @@ allyrscrplo_fun <- function(allyrscrs, grpsel){
   out <- plotly::subplot(
       plot_list, 
       nrows = length(vars), 
-      heights = c(0.22, 0.25, 0.25, 0.22)#rep(1/length(vars), length(vars))
+      heights = c(0.23, 0.25, 0.25, 0.23)#rep(1/length(vars), length(vars))
     ) |> 
     plotly::config(
       displaylogo = F, 

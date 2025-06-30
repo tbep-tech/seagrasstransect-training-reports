@@ -29,11 +29,11 @@ ui <- page_sidebar(
     secondary = "#A23B72"
   ),
   
-  # Custom CSS for TBEP branding and styling
+  # css styling
   tags$head(
     tags$link(rel = 'stylesheet', type = 'text/css', href = 'styles.css')
-    ),
-    
+  ),
+
   # Sidebar with controls
   sidebar = sidebar(
     title = "Controls",
@@ -69,7 +69,7 @@ ui <- page_sidebar(
       class = "small text-muted",
       p("Use the dropdown or navigation buttons to iterate through different training groups."),
       p("The plot shows score trends over years with a fitted trend line."), 
-      p(HTML("Contact <a href='mailto:sscolaro@tbep.org' target='_blank'>Sheila Scolaro</a> or <a href='mailto:mbeck@tbep.org' target='_blank'>Marcus Beck</a> for more information."))
+      p(HTML("Contact <a href='mailto:sscolaro@tbep.org' target='_blank'>Sheila Scolaro</a> or <a href='mailto:mbeck@tbep.org' target='_blank'>Marcus Beck</a> for more information. View the <a href='https://github.com/tbep-tech/seagrasstransect-training-reports' target='_blank'>source code</a> on GitHub."))
     )
     
   ),
@@ -77,9 +77,13 @@ ui <- page_sidebar(
   # Main content area
   div(
     style = "height: calc(100vh - 100px); overflow-y: auto; padding: 1rem; background-color: white;",
-    plotlyOutput(
-      outputId = "score_plot",
-      height = "1000px"
+    shinycssloaders::withSpinner(
+      plotlyOutput(
+        outputId = "score_plot",
+        height = "1000px"
+      ),
+      type = 6, 
+      color = "#2E86AB"  
     )
   )
 )
