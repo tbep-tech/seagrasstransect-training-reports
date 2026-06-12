@@ -15,7 +15,7 @@ save(trndat, file = here::here('data/trndat.rda'), compress = 'bzip2', version =
 data(trndat)
 
 yrs <- 2025
-# yrs <- unique(trndat$yr)
+yrs <- unique(trndat$yr)
 
 purrr::walk(yrs, ~ proc_grp(trndat, .x, quiet = F))
 

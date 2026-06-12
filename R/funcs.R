@@ -125,17 +125,38 @@ writeindex_fun <- function(trndat){
   
 }
 
+#' Get consensus species list for a given year
+#'
+#' @param trndat data frame, training data
+#' @param yr integer, year
+#'
+#' @return data frame of Site x Species where >= 2 groups reported non-zero Abundance
+truespp_fun <- function(trndat, yr){
+
+  trndat |>
+    dplyr::filter(yr == !!yr, var == 'Abundance') |>
+    dplyr::filter(aveval != '0') |>
+    dplyr::distinct(Site, Species, grpact) |>
+    dplyr::summarise(n_grps = dplyr::n_distinct(grpact), .by = c(Site, Species)) |>
+    dplyr::filter(n_grps >= 2) |>
+    dplyr::select(Site, Species)
+
+}
+
 #' Get "true" values from training data for a given year
-#' 
+#'
 #' @param trndat data frame, training data
 #' @param yr integer, year
 truvar_fun <- function(trndat, yr){
-  
+
+  truespp <- truespp_fun(trndat, yr)
+
   abulev <- c('0', '0.1', '0.5', '1', '2', '3', '4', '5')
   abulab <- c('no coverage', 'solitary', 'few', '<5%', '5-25%', '25-50%', '51-75%', '76-100%')
-  
-  out <- trndat |> 
+
+  out <- trndat |>
     dplyr::filter(yr == !!yr) |>
+    dplyr::semi_join(truespp, by = c('Site', 'Species')) |>
     tidyr::pivot_wider(names_from = var, values_from = aveval) |>
     dplyr::mutate(
       Abundance = factor(Abundance, levels = abulev), 
@@ -235,7 +256,8 @@ evaltrntab_fun <- function(evalgrp){
     dplyr::select(-abuaveval, -abutruval, -`Abundance truval`, -`Blade Length truval`, -`Short Shoot Density truval`) |> 
     dplyr::mutate_all(~ ifelse(. == 'NA (NA)', '', .)) |> 
     dplyr::mutate_at(c('Abundance reported (most common)', 'Blade Length reported (average)', 'Short Shoot Density reported (average)'), ~ gsub('^NA', '-', .)) |>
-    dplyr::mutate_at(c('abuavenum', 'blavenum', 'ssavenum'), ~ ifelse(is.na(.x), 0, .x)) |> # bullet won't plot if target is NA
+    dplyr::mutate_at(c('Abundance reported (most common)', 'Blade Length reported (average)', 'Short Shoot Density reported (average)'), ~ gsub('\\(NA\\)', '(--)', .)) |>
+    dplyr::mutate_at(c('abuavenum', 'abutrunum', 'blavenum', 'bltrunum', 'ssavenum', 'sstrunum'), ~ ifelse(is.na(.x), 0, .x)) |> # bullet won't plot if value is NA
     dplyr::arrange(Site, Species) |> 
     dplyr::mutate(Site = paste('Transect', Site)) |> 
     dplyr::group_by(Site)
@@ -326,12 +348,16 @@ sppdiff_fun <- function(evalgrp, vr = c('Abundance', 'Blade Length', 'Short Shoo
         truval
       ) |> 
       dplyr::mutate(across(-Species, as.numeric)) |>
+      dplyr::mutate(
+        aveval = dplyr::if_else(is.na(aveval) & !is.na(truval), 1, aveval),
+        truval = dplyr::if_else(!is.na(aveval) & is.na(truval), 1, truval)
+      ) |>
       dplyr::summarise(
         aveval = round(mean(aveval, na.rm = T), 0),
         sdtruv = round(sd(truval, na.rm = T), 0),
         truval = round(mean(truval, na.rm = T), 0),
         .by = 'Species'
-      ) |> 
+      ) |>
       dplyr::mutate(
         avediff = aveval - truval,
         aveperc = ifelse(truval == 0, NA, (aveval - truval) / ((aveval + truval) / 2))
@@ -618,7 +644,7 @@ scrsum_fun <- function(allgrpscr, grp){
   if(totscr == grdlvs[length(grdlvs)])
     lower <- NULL
   
-  screxp <- 'The overall score is based on a ranking relative to all other groups. The overall score is based on the average of the scores below for species abundance, blade length, and short shoot density. Each of these three scores is based on how close the reported values are to the overall averages ("true") across all groups participating in the transect training.  Reported values summarized for each species across all transects that deviate largely from the averages are given lower scores.  What is defined as "a lot" or "a little" deviation from the average varies by the measure. For example, smaller deviations from the average will be given lower scores if all groups scored similarly for a particular measure.'
+  screxp <- 'Your group\'s overall score is based on a ranking relative to all other groups. The overall score is based on the average of the scores below for species abundance, blade length, and short shoot density. Each of these three scores is based on how close the reported values are to the overall averages ("true") across all groups participating in the transect training.  Reported values summarized for each species across all transects that deviate largely from the averages are given lower scores.  What is defined as "a lot" or "a little" deviation from the average varies by the measure. For example, smaller deviations from the average will be given lower scores if all groups scored similarly for a particular measure.  The "true" species list, from which all other scores are derived, is based on species (seagrass or macroalgae) that were reported by at least two groups as present.'
   
   # ouput as list
   out <- paste0('
