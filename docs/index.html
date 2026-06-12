@@ -1,73 +1,201 @@
-<html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Seagrass Transect Training Report Cards</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f0f4f8;
+      color: #2d3748;
+      min-height: 100vh;
+    }
+
+    header {
+      background: #004F7E;
+      color: white;
+      padding: 2rem 2rem 1.75rem;
+    }
+    .header-inner {
+      max-width: 960px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      gap: 1.5rem;
+    }
+    .header-logo { flex-shrink: 0; height: 48px; width: auto; }
+    .header-text { flex: 1; }
+    header h1 { font-size: 1.65rem; font-weight: 700; letter-spacing: -0.3px; }
+    header p { margin-top: 0.3rem; font-size: 0.92rem; opacity: 0.8; }
+
+    .dashboard-btn {
+      display: inline-block;
+      margin-top: 1rem;
+      background: rgba(255,255,255,0.12);
+      color: white;
+      border: 1.5px solid rgba(255,255,255,0.45);
+      padding: 0.4rem 1rem;
+      border-radius: 5px;
+      text-decoration: none;
+      font-size: 0.88rem;
+      font-weight: 500;
+      transition: background 0.15s;
+    }
+    .dashboard-btn:hover { background: rgba(255,255,255,0.22); }
+
+    main {
+      max-width: 960px;
+      margin: 2.5rem auto;
+      padding: 0 1.5rem 3rem;
+    }
+
+    .year-section { margin-bottom: 2.5rem; }
+
+    .year-heading {
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: #004F7E;
+      padding-bottom: 0.4rem;
+      border-bottom: 2px solid #004F7E;
+      margin-bottom: 1rem;
+    }
+
+    .group-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
+      gap: 0.65rem;
+    }
+
+    .group-card {
+      background: white;
+      border: 1px solid #dde3ea;
+      border-radius: 7px;
+      padding: 0.8rem 1rem;
+      transition: box-shadow 0.15s, border-color 0.15s;
+    }
+    .group-card:hover {
+      box-shadow: 0 3px 12px rgba(0,79,126,0.12);
+      border-color: #004F7E;
+    }
+    .group-card a {
+      text-decoration: none;
+      color: #004F7E;
+      font-size: 0.88rem;
+      font-weight: 500;
+      display: block;
+    }
+    .group-card a:hover { color: #003260; }
+
+    footer {
+      text-align: center;
+      color: #999;
+      font-size: 0.82rem;
+      padding: 2rem;
+      border-top: 1px solid #e2e8f0;
+    }
+    footer a { color: #004F7E; text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+  </style>
+</head>
 <body>
-<h1>Transect training report cards</h1>
-<a href="https://tbep-tech.github.io/seagrasstransect-training-reports/app" target="_blank">Dashboard summary</a>
-<h2>2025</h2>
-<ul>
-<li><a href="A_2025.html" target="_blank">EPCHC (Kevin Campbell, Kirsti Martinez, Anthony Chacour)</a></li>
-<li><a href="B_2025.html" target="_blank">FDEP (FDEP DEAR)</a></li>
-<li><a href="C_2025.html" target="_blank">FWRI (Allison Patranella, Diana Daniels, Mike Wheeler, Lauren Chechoski)</a></li>
-<li><a href="D_2025.html" target="_blank">HC-ES (Troy Green, Sarah Sacco)</a></li>
-<li><a href="E_2025.html" target="_blank">MCNRD (K Harkinson)</a></li>
-<li><a href="F_2025.html" target="_blank">PCDEM (Sarah Nappier, Nicole Maloney, Christine Davies, Alex Manos)</a></li>
-<li><a href="G_2025.html" target="_blank">SWFWMD (T. Harter, C. Anastasiou, W. VanGelder, M. Walton, E. Walters)</a></li>
-<li><a href="H_2025.html" target="_blank">TBEP (SS, KFW, MB)</a></li>
-<li><a href="I_2025.html" target="_blank">TBW (RR, SB, BW, LD, MS, ER)</a></li>
-</ul>
-<h2>2024</h2>
-<ul>
-<li><a href="A_2024.html" target="_blank">EPCHC (Kevin Campbell, Kirsti Martinez, Anthony Chacour)</a></li>
-<li><a href="B_2024.html" target="_blank">FWRI (SS, AP, MW, SH, LB, BH)</a></li>
-<li><a href="C_2024.html" target="_blank">HC-ES (Mohamed Soumare, Jason Thomas, Sarah Usewick)</a></li>
-<li><a href="D_2024.html" target="_blank">PCDEM (Nicole Maloney, Christine Davies)</a></li>
-<li><a href="E_2024.html" target="_blank">PCDEM (Sarah Nappier, Melissa Harrison)</a></li>
-<li><a href="F_2024.html" target="_blank">SWFWMD (T. Schiro, W. VanGelder, C. Anastasiou)</a></li>
-<li><a href="G_2024.html" target="_blank">TBEP (Sheila Scolaro, Kerry Walia, Marcus Beck, Jessica Lewis)</a></li>
-<li><a href="H_2024.html" target="_blank">TBW (SH)</a></li>
-</ul>
-<h2>2023</h2>
-<ul>
-<li><a href="A_2023.html" target="_blank">EPCHC (Campbell, Kevin)</a></li>
-<li><a href="B_2023.html" target="_blank">FWRI (Allison Patranella, Samantha Scrudato, Victoria Congden, Mike Wheeler, Cory Ryder, Kate Rose, Sarah Hutchen)</a></li>
-<li><a href="C_2023.html" target="_blank">HC-ES (Troy Green, Mohamed Soumare, Sarah Usewick, Derek Mikos, Kelsey Smith)</a></li>
-<li><a href="D_2023.html" target="_blank">MCNRD (A. McClory)</a></li>
-<li><a href="E_2023.html" target="_blank">NA (Brandon Rau, Amber Cortazzo, Zack Hill, Nikki Jackson)</a></li>
-<li><a href="F_2023.html" target="_blank">NA (Stephanie Palomino, Grace Renninger, Gosta Muscadin, Kritisy Coen, Stephanie Palomino)</a></li>
-<li><a href="G_2023.html" target="_blank">PCDEM (Melissa Harrison, Nicole Maloney, Sarah Nappier)</a></li>
-<li><a href="H_2023.html" target="_blank">SWFWMD (City of Tampa)</a></li>
-<li><a href="I_2023.html" target="_blank">SWFWMD (T. Schiro, SPC staff (Linae Boehme and students))</a></li>
-<li><a href="J_2023.html" target="_blank">TBEP (SCS, MCB, KFW, MWB)</a></li>
-<li><a href="K_2023.html" target="_blank">TBW (SH)</a></li>
-</ul>
-<h2>2022</h2>
-<ul>
-<li><a href="A_2022.html" target="_blank">EPCHC (Kevin Campbell)</a></li>
-<li><a href="B_2022.html" target="_blank">FWRI (Victoria Congdon, Julie Christian (EPC))</a></li>
-<li><a href="C_2022.html" target="_blank">MCNRD (Alexandra (Allie) McClory)</a></li>
-<li><a href="D_2022.html" target="_blank">NA (Josh M., Brandon R., Nikki J.)</a></li>
-<li><a href="E_2022.html" target="_blank">PCDEM (Christine Joyner, Stacey Day, Ali Mauer-Rieman, Emma Dontis)</a></li>
-<li><a href="F_2022.html" target="_blank">SWFWMD (C. Anastasiou, w. VanGelder, m. Walton, T. Schiro)</a></li>
-<li><a href="G_2022.html" target="_blank">TBEP (Sheila Scolaro, Marcus Beck, Maya Burke)</a></li>
-<li><a href="H_2022.html" target="_blank">TBW (SH )</a></li>
-</ul>
-<h2>2021</h2>
-<ul>
-<li><a href="A_2021.html" target="_blank">EPCHC (Kevin Campbell, Brett Ursin, Chris Pratt)</a></li>
-<li><a href="B_2021.html" target="_blank">MCNRD (JP Nelson, K Harkinson)</a></li>
-<li><a href="C_2021.html" target="_blank">NA (UT)</a></li>
-<li><a href="D_2021.html" target="_blank">PCDEM (Emma Dontis, Alex Fugate, Ben Compton)</a></li>
-<li><a href="E_2021.html" target="_blank">PCDEM (Melissa Harrison, David (Atkins), Kaitlin Panzer)</a></li>
-<li><a href="F_2021.html" target="_blank">TBEP (SS, JL, BF)</a></li>
-<li><a href="G_2021.html" target="_blank">TBW (RR MG TK PL)</a></li>
-</ul>
-<h2>2020</h2>
-<ul>
-<li><a href="A_2020.html" target="_blank">MCNRD (K. Harkinson, J. P. Nelson)</a></li>
-<li><a href="B_2020.html" target="_blank">PCDEM (Pinellas (Mauer, Barnes, Panzer))</a></li>
-<li><a href="C_2020.html" target="_blank">SWFWMD (CA BH LH MD MW)</a></li>
-<li><a href="D_2020.html" target="_blank">TBEP (Marcus, Sheila, Maya)</a></li>
-<li><a href="E_2020.html" target="_blank">TBW (Serra katie jordan paige)</a></li>
-<li><a href="F_2020.html" target="_blank">USF (Luis, Erica, Ray)</a></li>
-</ul>
+  <header>
+    <div class="header-inner">
+      <img class="header-logo" src="data:image/png;base64,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" alt="TBEP logo">
+      <div class="header-text">
+        <h1>Seagrass Transect Training Report Cards</h1>
+        <p>Annual calibration results for seagrass monitoring groups in Tampa Bay</p>
+        <a class="dashboard-btn"
+           href="https://tbep-tech.github.io/seagrasstransect-training-reports/app"
+           target="_blank">Multi-Year Dashboard &#8594;</a>
+      </div>
+    </div>
+  </header>
+  <main>
+<div class="year-section">
+<div class="year-heading">2025</div>
+<div class="group-grid">
+<div class="group-card"><a href="A_2025.html" target="_blank">EPCHC (Kevin Campbell, Kirsti Martinez, Anthony Chacour)</a></div>
+<div class="group-card"><a href="B_2025.html" target="_blank">FDEP (FDEP DEAR)</a></div>
+<div class="group-card"><a href="C_2025.html" target="_blank">FWRI (Allison Patranella, Diana Daniels, Mike Wheeler, Lauren Chechoski)</a></div>
+<div class="group-card"><a href="D_2025.html" target="_blank">HC-ES (Troy Green, Sarah Sacco)</a></div>
+<div class="group-card"><a href="E_2025.html" target="_blank">MCNRD (K Harkinson)</a></div>
+<div class="group-card"><a href="F_2025.html" target="_blank">PCDEM (Sarah Nappier, Nicole Maloney, Christine Davies, Alex Manos)</a></div>
+<div class="group-card"><a href="G_2025.html" target="_blank">SWFWMD (T. Harter, C. Anastasiou, W. VanGelder, M. Walton, E. Walters)</a></div>
+<div class="group-card"><a href="H_2025.html" target="_blank">TBEP (SS, KFW, MB)</a></div>
+<div class="group-card"><a href="I_2025.html" target="_blank">TBW (RR, SB, BW, LD, MS, ER)</a></div>
+</div>
+</div>
+<div class="year-section">
+<div class="year-heading">2024</div>
+<div class="group-grid">
+<div class="group-card"><a href="A_2024.html" target="_blank">EPCHC (Kevin Campbell, Kirsti Martinez, Anthony Chacour)</a></div>
+<div class="group-card"><a href="B_2024.html" target="_blank">FWRI (SS, AP, MW, SH, LB, BH)</a></div>
+<div class="group-card"><a href="C_2024.html" target="_blank">HC-ES (Mohamed Soumare, Jason Thomas, Sarah Usewick)</a></div>
+<div class="group-card"><a href="D_2024.html" target="_blank">PCDEM (Nicole Maloney, Christine Davies)</a></div>
+<div class="group-card"><a href="E_2024.html" target="_blank">PCDEM (Sarah Nappier, Melissa Harrison)</a></div>
+<div class="group-card"><a href="F_2024.html" target="_blank">SWFWMD (T. Schiro, W. VanGelder, C. Anastasiou)</a></div>
+<div class="group-card"><a href="G_2024.html" target="_blank">TBEP (Sheila Scolaro, Kerry Walia, Marcus Beck, Jessica Lewis)</a></div>
+<div class="group-card"><a href="H_2024.html" target="_blank">TBW (SH)</a></div>
+</div>
+</div>
+<div class="year-section">
+<div class="year-heading">2023</div>
+<div class="group-grid">
+<div class="group-card"><a href="A_2023.html" target="_blank">EPCHC (Campbell, Kevin)</a></div>
+<div class="group-card"><a href="B_2023.html" target="_blank">FWRI (Allison Patranella, Samantha Scrudato, Victoria Congden, Mike Wheeler, Cory Ryder, Kate Rose, Sarah Hutchen)</a></div>
+<div class="group-card"><a href="C_2023.html" target="_blank">HC-ES (Troy Green, Mohamed Soumare, Sarah Usewick, Derek Mikos, Kelsey Smith)</a></div>
+<div class="group-card"><a href="D_2023.html" target="_blank">MCNRD (A. McClory)</a></div>
+<div class="group-card"><a href="E_2023.html" target="_blank">NA (Brandon Rau, Amber Cortazzo, Zack Hill, Nikki Jackson)</a></div>
+<div class="group-card"><a href="F_2023.html" target="_blank">NA (Stephanie Palomino, Grace Renninger, Gosta Muscadin, Kritisy Coen, Stephanie Palomino)</a></div>
+<div class="group-card"><a href="G_2023.html" target="_blank">PCDEM (Melissa Harrison, Nicole Maloney, Sarah Nappier)</a></div>
+<div class="group-card"><a href="H_2023.html" target="_blank">SWFWMD (City of Tampa)</a></div>
+<div class="group-card"><a href="I_2023.html" target="_blank">SWFWMD (T. Schiro, SPC staff (Linae Boehme and students))</a></div>
+<div class="group-card"><a href="J_2023.html" target="_blank">TBEP (SCS, MCB, KFW, MWB)</a></div>
+<div class="group-card"><a href="K_2023.html" target="_blank">TBW (SH)</a></div>
+</div>
+</div>
+<div class="year-section">
+<div class="year-heading">2022</div>
+<div class="group-grid">
+<div class="group-card"><a href="A_2022.html" target="_blank">EPCHC (Kevin Campbell)</a></div>
+<div class="group-card"><a href="B_2022.html" target="_blank">FWRI (Victoria Congdon, Julie Christian (EPC))</a></div>
+<div class="group-card"><a href="C_2022.html" target="_blank">MCNRD (Alexandra (Allie) McClory)</a></div>
+<div class="group-card"><a href="D_2022.html" target="_blank">NA (Josh M., Brandon R., Nikki J.)</a></div>
+<div class="group-card"><a href="E_2022.html" target="_blank">PCDEM (Christine Joyner, Stacey Day, Ali Mauer-Rieman, Emma Dontis)</a></div>
+<div class="group-card"><a href="F_2022.html" target="_blank">SWFWMD (C. Anastasiou, w. VanGelder, m. Walton, T. Schiro)</a></div>
+<div class="group-card"><a href="G_2022.html" target="_blank">TBEP (Sheila Scolaro, Marcus Beck, Maya Burke)</a></div>
+<div class="group-card"><a href="H_2022.html" target="_blank">TBW (SH )</a></div>
+</div>
+</div>
+<div class="year-section">
+<div class="year-heading">2021</div>
+<div class="group-grid">
+<div class="group-card"><a href="A_2021.html" target="_blank">EPCHC (Kevin Campbell, Brett Ursin, Chris Pratt)</a></div>
+<div class="group-card"><a href="B_2021.html" target="_blank">MCNRD (JP Nelson, K Harkinson)</a></div>
+<div class="group-card"><a href="C_2021.html" target="_blank">NA (UT)</a></div>
+<div class="group-card"><a href="D_2021.html" target="_blank">PCDEM (Emma Dontis, Alex Fugate, Ben Compton)</a></div>
+<div class="group-card"><a href="E_2021.html" target="_blank">PCDEM (Melissa Harrison, David (Atkins), Kaitlin Panzer)</a></div>
+<div class="group-card"><a href="F_2021.html" target="_blank">TBEP (SS, JL, BF)</a></div>
+<div class="group-card"><a href="G_2021.html" target="_blank">TBW (RR MG TK PL)</a></div>
+</div>
+</div>
+<div class="year-section">
+<div class="year-heading">2020</div>
+<div class="group-grid">
+<div class="group-card"><a href="A_2020.html" target="_blank">MCNRD (K. Harkinson, J. P. Nelson)</a></div>
+<div class="group-card"><a href="B_2020.html" target="_blank">PCDEM (Pinellas (Mauer, Barnes, Panzer))</a></div>
+<div class="group-card"><a href="C_2020.html" target="_blank">SWFWMD (CA BH LH MD MW)</a></div>
+<div class="group-card"><a href="D_2020.html" target="_blank">TBEP (Marcus, Sheila, Maya)</a></div>
+<div class="group-card"><a href="E_2020.html" target="_blank">TBW (Serra katie jordan paige)</a></div>
+<div class="group-card"><a href="F_2020.html" target="_blank">USF (Luis, Erica, Ray)</a></div>
+</div>
+</div>
+  </main>
+  <footer>
+    <a href="https://tbep.org" target="_blank">Tampa Bay Estuary Program</a>
+  </footer>
 </body>
 </html>

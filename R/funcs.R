@@ -83,46 +83,49 @@ proc_grp <- function(trndat, yr, quiet = F){
 #' 
 #' @param trndata data frame of transect training data
 writeindex_fun <- function(trndat){
-  
+
   fls <- list.files(here::here('docs'), pattern = '\\d\\.html$', full.names = F)
 
-  # create html string for lists by year and group
-  flsdf <- tibble::tibble(
-    fls = fls
-  ) |> 
+  # build card markup grouped by year (newest first)
+  content <- tibble::tibble(fls = fls) |>
     dplyr::mutate(
-      yr = gsub(fls, pattern = '.*_(\\d{4}).*', replacement = '\\1'), 
+      yr  = gsub(fls, pattern = '.*_(\\d{4}).*',    replacement = '\\1'),
       grp = gsub(fls, pattern = '(.*)_(\\d{4}).*', replacement = '\\1')
-    ) |> 
-    dplyr::rowwise() |> 
-    dplyr::mutate( 
-      grpact = unique(trndat$grpact[trndat$yr == yr & trndat$grp == grp]), 
-      grpact = gsub('^\\d{4}: ', '', grpact),
-      grphtml = paste0('<li><a href="', fls, '" target="_blank">', grpact, '</a></li>')
-    ) |> 
-    dplyr::ungroup() |> 
-    dplyr::arrange(yr, grp) |> 
-    dplyr::select(yr, grphtml) |> 
+    ) |>
+    dplyr::rowwise() |>
     dplyr::mutate(
-      yr = paste0('<h2>', yr, '</h2>\n')
-    ) |> 
-    dplyr::group_nest(yr) |> 
-    dplyr::arrange(desc(yr)) |> 
+      grpact  = unique(trndat$grpact[trndat$yr == yr & trndat$grp == grp]),
+      grpact  = gsub('^\\d{4}: ', '', grpact),
+      grphtml = paste0('<div class="group-card"><a href="', fls, '" target="_blank">', grpact, '</a></div>')
+    ) |>
+    dplyr::ungroup() |>
+    dplyr::arrange(yr, grp) |>
+    dplyr::select(yr, grphtml) |>
+    dplyr::group_nest(yr) |>
+    dplyr::arrange(dplyr::desc(yr)) |>
     dplyr::mutate(
-      data = purrr::map(data, ~ dplyr::pull(.x) |> paste0(collapse = '\n')),
-      data = purrr::map(data, ~ paste0('<ul>\n', .x, '\n</ul>\n'))
-    ) |> 
-    tidyr::unnest('data') |> 
-    tidyr::unite('yr', yr, data, sep = '') |> 
-    dplyr::pull('yr') |> 
-    paste0(collapse = '') 
-  
-  # add html header tags
-  towrt <- paste0('<html>\n<body>\n<h1>Transect training report cards</h1>\n<a href="https://tbep-tech.github.io/seagrasstransect-training-reports/app" target="_blank">Dashboard summary</a>\n', flsdf, '</body>\n</html>')
-  
-  # write output
+      cards   = purrr::map_chr(data, ~ paste0(dplyr::pull(.x), collapse = '\n')),
+      section = paste0(
+        '<div class="year-section">\n',
+        '<div class="year-heading">', yr, '</div>\n',
+        '<div class="group-grid">\n', cards, '\n</div>\n',
+        '</div>'
+      )
+    ) |>
+    dplyr::pull(section) |>
+    paste0(collapse = '\n')
+
+  # base64-encode logo so the output HTML is self-contained
+  logo_b64 <- base64enc::base64encode(here::here('images', 'tarponlogo.png'))
+  logo_src  <- paste0('data:image/png;base64,', logo_b64)
+
+  # inject logo and content into template, then write
+  template <- readLines(here::here('docs', 'index_template.html')) |> paste0(collapse = '\n')
+  towrt <- gsub('__LOGO_SRC__',            logo_src, template, fixed = TRUE)
+  towrt <- gsub('<!-- REPORT_CONTENT -->', content,  towrt,    fixed = TRUE)
+
   writeLines(towrt, con = here::here('docs/index.html'))
-  
+
 }
 
 #' Get consensus species list for a given year
