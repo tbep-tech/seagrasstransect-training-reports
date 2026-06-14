@@ -1,0 +1,429 @@
+---
+title: "How Report Card Scores Are Calculated"
+format:
+  html:
+    embed-resources: true
+    toc: true
+    toc-depth: 3
+    toc-title: "Contents"
+    css: ../styles.css
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r}
+library(tbeptools)
+library(dplyr)
+library(tidyr)
+library(purrr)
+library(ggplot2)
+library(gt)
+library(here)
+
+source(here('R/funcs.R'))
+load(here('data/trndat.rda'))
+
+# example year and groups used throughout
+ex_yr  <- 2025
+ex_grps <- sort(unique(trndat$grpact[trndat$yr == ex_yr]))
+
+# pre-compute objects reused across sections
+truespp  <- truespp_fun(trndat, ex_yr)
+truvar   <- truvar_fun(trndat, ex_yr)
+cal      <- calibrate_scr_fun(trndat)
+allgrpscr <- allgrpscr_fun(trndat, ex_yr, truvar, cal = cal)
+
+# pick the median-scoring group as the "worked example" group
+ex_grp <- allgrpscr |>
+  dplyr::arrange(as.numeric(factor(Total,
+    levels = c('A','A-','B+','B','B-','C+','C','C-','D+','D')))) |>
+  dplyr::slice(ceiling(n() / 2)) |>
+  dplyr::pull(grpact)
+
+ex_grp_label <- gsub('^\\d{4}:\\s', '', ex_grp)
+
+evalgrp <- evalgrp_fun(trndat, ex_yr, ex_grp, truvar)
+```
+
+## Overview
+
+Each year, multiple monitoring groups survey the same seagrass transects independently. Because there is no single external ground truth, scores are based on **how consistently groups agree with each other**. A group that reports values close to the cross-group average earns a high score and one that deviates substantially earns a lower score.
+
+Scores are calculated for three field measurements:
+
+- **Abundance** — Braun-Blanquet cover category (0, 0.1, 0.5, 1, 2, 3, 4, 5)
+- **Blade Length** — average blade length in cm
+- **Short Shoot Density** — shoots per m²
+
+These three metric scores are averaged into an overall **Total** score, which is then converted to a letter grade.
+
+---
+
+## Step 1: The Consensus Species List
+
+Not every species recorded across all groups counts toward scoring. A species at a given transect is considered **truly present** only if **at least two distinct groups** reported it with non-zero abundance. This filters out likely misidentifications while still being inclusive — a species does not need to be unanimous, just corroborated.
+
+```{r}
+#| label: tbl-truespp
+#| tbl-cap: !expr paste("Consensus species at each transect in", ex_yr, "— species reported as non-zero by ≥2 groups.")
+
+truespp |>
+  dplyr::count(Site, name = 'n_species') |>
+  dplyr::mutate(
+    Species = purrr::map_chr(Site, function(s){
+      truespp |>
+        dplyr::filter(Site == s) |>
+        dplyr::pull(Species) |>
+        sort() |>
+        paste(collapse = ', ')
+    })
+  ) |>
+  dplyr::rename(Transect = Site, `Species count` = n_species) |>
+  gt::gt() |>
+  gt::tab_style(
+    style = gt::cell_text(style = 'italic'),
+    locations = gt::cells_body(columns = Species)
+  ) |>
+  gt::cols_align('left') |>
+  gt::opt_stylize(style = 1, color = 'blue')
+```
+
+The consensus list is computed **per transect**, so a species may be on the list at one transect but not another.
+
+---
+
+## Step 2: True Values
+
+For each consensus species at each transect, **true values** are calculated as the cross-group average:
+
+- **Abundance**: group Braun-Blanquet categories are converted to their numeric level (1–8), averaged across groups, then converted back to the nearest BB value.
+- **Blade Length** and **Short Shoot Density**: simple means across groups.
+
+Only consensus species enter this calculation. This prevents a misidentified species (recorded by only one group) from distorting the true values for everyone else.
+
+```{r}
+#| label: tbl-truvar
+#| tbl-cap: !expr paste("Example true values for transect 1 in", ex_yr, "— cross-group averages for consensus species.")
+
+truvar |>
+  dplyr::filter(Site == min(as.numeric(Site))) |>
+  tidyr::pivot_wider(names_from = var, values_from = truval) |>
+  dplyr::mutate(
+    Abundance = as.character(Abundance),
+    `Blade Length` = ifelse(is.na(`Blade Length`), '—', sprintf('%.1f cm', `Blade Length`)),
+    `Short Shoot Density` = ifelse(is.na(`Short Shoot Density`), '—',
+                                   sprintf('%.0f per m²', `Short Shoot Density`))
+  ) |>
+  dplyr::rename(Transect = Site) |>
+  gt::gt() |>
+  gt::tab_style(
+    style = gt::cell_text(style = 'italic'),
+    locations = gt::cells_body(columns = Species)
+  ) |>
+  gt::cols_align('left') |>
+  gt::opt_stylize(style = 1, color = 'blue')
+```
+
+A dash (—) means that measurement was not recorded for that species at that transect.
+
+---
+
+## Step 3: Group Deviations and Species ID Penalties
+
+For each group, reported values are compared to the true values across all consensus species and transects. This comparison uses a **full join**, which naturally reveals two types of species identification errors:
+
+**Missed species** — a consensus species is present but the group did not record it. The group's abundance for that species is treated as level 1 ("no coverage") when computing the deviation, applying a slight penalty.
+
+**False positives** — the group recorded a species that is not on the consensus list (i.e., no other group confirmed it). The true abundance is treated as level 1, again applying a slight penalty.
+
+These penalties only affect the **Abundance** score. Blade Length and Short Shoot Density cannot be meaningfully penalised for species that were not found, so those metrics use `na.rm = TRUE` when averaging.
+
+```{r}
+#| label: tbl-evalgrp
+#| tbl-cap: !expr paste0("Reported vs. true values for group '", ex_grp_label, "' at one transect in ", ex_yr, ". A dash in the Reported column indicates a missed species; a dash in the True column indicates a false positive.")
+
+evalgrp |>
+  dplyr::filter(Site == min(as.numeric(Site))) |>
+  dplyr::select(
+    Transect = Site, Species,
+    `Abundance reported` = `Abundance aveval`,
+    `Abundance true`     = `Abundance truval`,
+    `Blade Length reported` = `Blade Length aveval`,
+    `Blade Length true`     = `Blade Length truval`
+  ) |>
+  dplyr::mutate(dplyr::across(everything(), ~ ifelse(is.na(.), '—', as.character(.)))) |>
+  gt::gt() |>
+  gt::tab_style(
+    style = gt::cell_text(style = 'italic'),
+    locations = gt::cells_body(columns = Species)
+  ) |>
+  gt::cols_align('left') |>
+  gt::opt_stylize(style = 1, color = 'blue')
+```
+
+---
+
+## Step 4: Metric Scores
+
+For each metric, deviations from the true value are summarised per species across transects, then combined into a single number per group per metric. The combination uses a **weighted mean of absolute differences**, where the weight for each species is the inverse of the standard deviation of the true values across transects:
+
+$$
+\text{metric score}_{\text{raw}} = \sum_{\text{species}} \frac{|\bar{d}_s|}{1 + \sigma_s}
+$$
+
+where $\bar{d}_s$ is the mean absolute deviation for species $s$ and $\sigma_s$ is the standard deviation of the true values for that species across transects. Species where the true value varies a lot across transects (high $\sigma_s$) contribute less to the final score, since agreement there is inherently harder to achieve.
+
+```{r}
+#| label: tbl-sppdiff
+#| tbl-cap: !expr paste0("Per-species deviation summary for group '", ex_grp_label, "' in ", ex_yr, " — Abundance metric.")
+
+sppdiff_fun(evalgrp, 'Abundance') |>
+  dplyr::mutate(
+    aveval  = factor(aveval  - 1, levels = 0:7,
+                     labels = c('no coverage','solitary','few','<5%','5-25%','25-50%','51-75%','76-100%')),
+    truval  = factor(truval  - 1, levels = 0:7,
+                     labels = c('no coverage','solitary','few','<5%','5-25%','25-50%','51-75%','76-100%')),
+    avediff = round(avediff, 2)
+  ) |>
+  dplyr::select(Species, `Reported (avg)` = aveval, `True (avg)` = truval,
+                `Mean deviation` = avediff) |>
+  gt::gt() |>
+  gt::tab_style(
+    style = gt::cell_text(style = 'italic'),
+    locations = gt::cells_body(columns = Species)
+  ) |>
+  gt::cols_align('left') |>
+  gt::opt_stylize(style = 1, color = 'blue')
+```
+
+---
+
+## Step 5: Score Calibration
+
+Raw metric scores are converted to a 0–100 scale. Without calibration, the best group in any year always maps to ~100 and the worst always maps to ~50, regardless of how closely groups agreed. This means a year where everyone performed very well would still produce a spread from A to D — an unfair outcome.
+
+To address this, the score floor (the minimum possible score) is **raised in years when all groups agree closely with each other**, and kept at 50 in years when disagreement is typical or high.
+
+### How calibration works
+
+For each year and metric, we compute the **within-year standard deviation** of group deviations — a measure of how spread out the groups were. Across all training years, these yearly spreads are standardised to z-scores. A negative z-score means groups agreed more than usual; a positive z-score means more disagreement than usual.
+
+The score floor for a given year and metric is:
+
+$$
+\text{floor} = \max\!\left(50,\ 50 - z \times 15\right)
+$$
+
+where $z$ is the z-score of within-year spread for that metric and year, and 15 is a scaling constant (grade-points per standard deviation). A year that is 1 SD tighter than average gets a floor of 65; 2 SDs tighter gets a floor of 80. Loose years (positive z) are capped at 50 — no extra penalty beyond the standard range.
+
+```{r}
+#| label: fig-calibration
+#| fig-cap: "Within-year spread of group deviations for each metric and year. Bar colour shows the z-score; the dashed line is the historical mean. Bar labels show the z-score and the resulting score floor. Blue (negative z) years are tighter than average and receive a higher score floor."
+#| fig-height: 4
+
+yrs <- sort(unique(trndat$yr))
+
+cal_lkp <- tibble::tibble(
+  metric  = c('Abundance', 'Blade Length', 'Short Shoot Density'),
+  mean_sd = c(cal$mean_sd$Abundance, cal$mean_sd$`Blade Length`,
+              cal$mean_sd$`Short Shoot Density`),
+  sd_sd   = c(cal$sd_sd$Abundance,   cal$sd_sd$`Blade Length`,
+              cal$sd_sd$`Short Shoot Density`)
+)
+
+yr_spreads <- purrr::map(yrs, function(yr){
+  tv <- truvar_fun(trndat, yr)
+  allgrpscr_fun(trndat, yr, tv, raw_diff = TRUE) |>
+    dplyr::summarise(dplyr::across(Abundance:`Short Shoot Density`,
+                                   ~ sd(.x, na.rm = TRUE))) |>
+    dplyr::mutate(yr = yr)
+}) |>
+  dplyr::bind_rows() |>
+  tidyr::pivot_longer(-yr, names_to = 'metric', values_to = 'sd_avediff') |>
+  dplyr::left_join(cal_lkp, by = 'metric') |>
+  dplyr::mutate(
+    z_score   = (sd_avediff - mean_sd) / sd_sd,
+    floor_adj = as.integer(pmax(50, 50 - z_score * 15)),
+    metric    = factor(metric, levels = c('Abundance', 'Blade Length', 'Short Shoot Density'))
+  )
+
+ggplot(yr_spreads, aes(x = factor(yr), y = sd_avediff, fill = z_score)) +
+  geom_col(width = 0.7, colour = 'grey40', linewidth = 0.3) +
+  geom_hline(aes(yintercept = mean_sd), linetype = 'dashed', linewidth = 0.6) +
+  geom_text(aes(label = sprintf('z=%.1f\nfloor=%d', z_score, floor_adj)),
+            vjust = -0.25, size = 2.5, lineheight = 0.9) +
+  scale_fill_gradient2(low = '#2166ac', mid = '#f7f7f7', high = '#d73027',
+                       midpoint = 0, name = 'Z-score') +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.28))) +
+  facet_wrap(~ metric, scales = 'free_y', nrow = 1) +
+  labs(x = NULL, y = 'Within-year SD of group deviations') +
+  theme_bw(base_size = 10) +
+  theme(legend.position = 'right',
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        strip.background = element_rect(fill = '#004F7E'),
+        strip.text = element_text(colour = 'white', face = 'bold'))
+```
+
+### Effect on scores: a tight vs. loose year
+
+The table below compares the calibrated score floor for each year and metric, illustrating how the floor shifts in tighter training years.
+
+```{r}
+#| label: tbl-floors
+#| tbl-cap: "Calibrated score floor by year and metric. Years with consistently tight agreement receive a higher floor, raising the minimum grade for all groups in that year."
+
+yr_spreads |>
+  dplyr::select(yr, metric, floor_adj) |>
+  tidyr::pivot_wider(names_from = metric, values_from = floor_adj) |>
+  dplyr::rename(Year = yr) |>
+  gt::gt() |>
+  gt::data_color(
+    columns = c(Abundance, `Blade Length`, `Short Shoot Density`),
+    fn = scales::col_numeric(
+      palette = c('#d73027', '#f7f7f7', '#2166ac'),
+      domain = c(50, 85),
+      reverse = TRUE
+    )
+  ) |>
+  gt::cols_align('center', columns = -Year) |>
+  gt::opt_stylize(style = 1, color = 'blue')
+```
+
+---
+
+## Step 6: Letter Grades
+
+After calibration, each group's numeric score for each metric falls on a 0–100 scale. These are mapped to letter grades using fixed thresholds:
+
+```{r}
+#| label: tbl-grades
+#| tbl-cap: "Letter grade thresholds. Scores at or above the lower bound but below the upper bound receive the listed grade."
+
+tibble::tibble(
+  Grade        = c('A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D+', 'D'),
+  `Score range` = c('95 – 100', '90 – 94', '85 – 89', '80 – 84',
+                    '75 – 79', '70 – 74', '65 – 69', '60 – 64', '55 – 59', 'below 55')
+) |>
+  gt::gt() |>
+  gt::cols_align('center') |>
+  gt::opt_stylize(style = 1, color = 'blue')
+```
+
+The Total score is the unweighted average of the Abundance, Blade Length, and Short Shoot Density numeric scores, then converted to a letter grade using the same thresholds.
+
+---
+
+## Worked Example
+
+```{r}
+ex_grpscr <- allgrpscr_fun(trndat, ex_yr, truvar, cal = cal) |>
+  dplyr::filter(grpact == ex_grp)
+
+ex_grpscr_raw <- allgrpscr_fun(trndat, ex_yr, truvar, cal = cal, raw = TRUE) |>
+  dplyr::filter(grpact == ex_grp)
+```
+
+The following walks through the full scoring pipeline for **`r ex_grp_label`** in **`r ex_yr`**.
+
+### Raw deviations
+
+```{r}
+#| label: tbl-example-sppdiff
+#| tbl-cap: !expr paste0("Per-species deviations across all metrics for group '", ex_grp_label, "' in ", ex_yr, ".")
+
+purrr::map(c('Abundance', 'Blade Length', 'Short Shoot Density'), function(vr){
+  sppdiff_fun(evalgrp, vr) |>
+    dplyr::mutate(metric = vr, avediff = round(avediff, 2)) |>
+    dplyr::select(metric, Species, `Reported avg` = aveval, `True avg` = truval,
+                  `Mean deviation` = avediff)
+}) |>
+  dplyr::bind_rows() |>
+  gt::gt(groupname_col = 'metric') |>
+  gt::tab_style(
+    style = gt::cell_text(style = 'italic'),
+    locations = gt::cells_body(columns = Species)
+  ) |>
+  gt::tab_style(
+    style = list(gt::cell_fill(color = '#004F7E'),
+                 gt::cell_text(color = 'white', weight = 'bold')),
+    locations = gt::cells_row_groups()
+  ) |>
+  gt::cols_align('left') |>
+  gt::opt_stylize(style = 1, color = 'blue')
+```
+
+### Scores
+
+```{r}
+#| label: tbl-example-scores
+#| tbl-cap: !expr paste0("Final scores for group '", ex_grp_label, "' in ", ex_yr, " — numeric (calibrated) and letter grade.")
+
+dplyr::bind_rows(
+  ex_grpscr_raw |>
+    tidyr::pivot_longer(-grpact, names_to = 'Metric', values_to = 'value') |>
+    dplyr::mutate(type = 'Numeric score', value = as.character(round(as.numeric(value), 1))),
+  ex_grpscr |>
+    tidyr::pivot_longer(-grpact, names_to = 'Metric', values_to = 'value') |>
+    dplyr::mutate(type = 'Letter grade')
+) |>
+  dplyr::select(-grpact) |>
+  tidyr::pivot_wider(names_from = type, values_from = value) |>
+  dplyr::mutate(
+    Metric = factor(Metric, levels = c('Abundance', 'Blade Length', 'Short Shoot Density', 'Total'))
+  ) |>
+  dplyr::arrange(Metric) |>
+  gt::gt() |>
+  gt::cols_align('center', columns = -Metric) |>
+  gt::tab_style(
+    style = gt::cell_text(weight = 'bold'),
+    locations = gt::cells_body(rows = Metric == 'Total')
+  ) |>
+  gt::opt_stylize(style = 1, color = 'blue')
+```
+
+### How the calibration affected this group's scores
+
+```{r}
+#| label: tbl-example-cal
+#| tbl-cap: !expr paste0("Effect of calibration on scores for group '", ex_grp_label, "' in ", ex_yr, ". The floor is the lowest possible score any group could receive in this year for each metric.")
+
+yr_spreads_wide <- yr_spreads |>
+  dplyr::filter(yr == ex_yr) |>
+  dplyr::select(metric, z_score, floor_adj)
+
+ex_grpscr_nocal_raw <- allgrpscr_fun(trndat, ex_yr, truvar, raw = TRUE) |>
+  dplyr::filter(grpact == ex_grp) |>
+  tidyr::pivot_longer(-grpact, names_to = 'metric', values_to = 'score_before') |>
+  dplyr::select(-grpact)
+
+ex_grpscr_cal_raw <- ex_grpscr_raw |>
+  tidyr::pivot_longer(-grpact, names_to = 'metric', values_to = 'score_after') |>
+  dplyr::select(-grpact)
+
+dplyr::left_join(ex_grpscr_nocal_raw, ex_grpscr_cal_raw, by = 'metric') |>
+  dplyr::left_join(yr_spreads_wide, by = 'metric') |>
+  dplyr::filter(metric != 'Total') |>
+  dplyr::mutate(
+    dplyr::across(c(score_before, score_after), ~ round(as.numeric(.), 1)),
+    z_score = round(z_score, 2),
+    floor_adj = as.integer(floor_adj)
+  ) |>
+  dplyr::rename(
+    Metric = metric,
+    `Score without calibration` = score_before,
+    `Score with calibration` = score_after,
+    `Z-score (within-year spread)` = z_score,
+    `Score floor` = floor_adj
+  ) |>
+  dplyr::mutate(
+    Metric = factor(Metric, levels = c('Abundance', 'Blade Length', 'Short Shoot Density'))
+  ) |>
+  dplyr::arrange(Metric) |>
+  gt::gt() |>
+  gt::cols_align('center', columns = -Metric) |>
+  gt::opt_stylize(style = 1, color = 'blue')
+```
+
+A negative Z-score (tighter than average cohort) raises the floor for all groups, including this one. A floor of 50 means no calibration adjustment was applied.

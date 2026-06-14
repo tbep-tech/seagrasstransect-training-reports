@@ -23,9 +23,12 @@ proc_grp <- function(trndat, yr, quiet = F){
   
   # "true" scores as average
   truvar <- truvar_fun(trndat, yr)
-  
+
+  # calibration constants from historical data
+  cal <- calibrate_scr_fun(trndat)
+
   # group report card
-  allgrpscr <- allgrpscr_fun(trndat, yr, truvar)
+  allgrpscr <- allgrpscr_fun(trndat, yr, truvar, cal = cal)
   
   for(grp in grps){
     
@@ -545,13 +548,52 @@ card_fun <- function(evalgrp, grp, allgrpscr, vr = c('Abundance', 'Blade Length'
   
 }
 
+#' Compute per-metric calibration constants from historical within-year spread
+#'
+#' For each year, computes the within-year SD of group weighted-mean absolute
+#' deviations per metric (how spread out groups were relative to each other).
+#' Returns the mean and SD of those yearly spreads so a focal year can be
+#' z-scored against history to adjust the grade floor.
+#'
+#' @param trndat data frame, training data
+#'
+#' @return named list with elements \code{mean_sd} and \code{sd_sd}, each a
+#'   named list of per-metric values
+calibrate_scr_fun <- function(trndat){
+
+  yrs <- unique(trndat$yr)
+
+  yr_spreads <- purrr::map(yrs, function(yr){
+    truvar <- truvar_fun(trndat, yr)
+    allgrpscr_fun(trndat, yr, truvar, raw_diff = TRUE) |>
+      dplyr::summarise(dplyr::across(Abundance:`Short Shoot Density`,
+                                     ~ sd(.x, na.rm = TRUE))) |>
+      dplyr::mutate(yr = yr)
+  }) |>
+    dplyr::bind_rows()
+
+  list(
+    mean_sd = yr_spreads |>
+      dplyr::summarise(dplyr::across(Abundance:`Short Shoot Density`,
+                                     ~ mean(.x, na.rm = TRUE))) |>
+      as.list(),
+    sd_sd = yr_spreads |>
+      dplyr::summarise(dplyr::across(Abundance:`Short Shoot Density`,
+                                     ~ sd(.x, na.rm = TRUE))) |>
+      as.list()
+  )
+
+}
+
 #' Calculate scores for all groups based on distribution of scores
-#' 
+#'
 #' @param trndat data frame of all seagrass transect training data
 #' @param yr integer, year
 #' @param truvar data frame "true" values from training data for a given year
 #' @param raw logical, return raw scores, otherwise letter grades
-allgrpscr_fun <- function(trndat, yr, truvar, raw = F){
+#' @param raw_diff logical, return pre-rescale weighted-mean absolute deviations
+#' @param cal named list of per-metric calibration constants from \code{\link{calibrate_scr_fun}}
+allgrpscr_fun <- function(trndat, yr, truvar, raw = F, raw_diff = FALSE, cal = NULL){
 
   scrs <- trndat |> 
     dplyr::filter(yr == !!yr) |> 
@@ -576,11 +618,38 @@ allgrpscr_fun <- function(trndat, yr, truvar, raw = F){
     ) |> 
     dplyr::select(-evalgrp) |> 
     tidyr::unnest(avediff) |>
-    tidyr::pivot_wider(names_from = var, values_from = avediff) |> 
-    dplyr::mutate(
-      dplyr::across(`Abundance`:`Short Shoot Density`, ~ scales::rescale(abs(.x), to = c(100, 50))),
-      `Total` = (`Blade Length` + `Short Shoot Density` + `Abundance`) / 3
-    )
+    tidyr::pivot_wider(names_from = var, values_from = avediff)
+
+  if(raw_diff)
+    return(scrs)
+
+  if(!is.null(cal)){
+    # z-score this year's within-year spread against historical; negative z = tight year
+    yr_sd <- scrs |>
+      dplyr::summarise(dplyr::across(Abundance:`Short Shoot Density`,
+                                     ~ sd(.x, na.rm = TRUE)))
+    safe_z <- function(val, mn, s) ifelse(is.na(s) | s == 0, 0, (val - mn) / s)
+    k <- 15  # grade-points of floor lift per SD below average; increase to amplify
+    z_abu <- safe_z(yr_sd$Abundance,          cal$mean_sd$Abundance,          cal$sd_sd$Abundance)
+    z_bl  <- safe_z(yr_sd$`Blade Length`,     cal$mean_sd$`Blade Length`,     cal$sd_sd$`Blade Length`)
+    z_ss  <- safe_z(yr_sd$`Short Shoot Density`, cal$mean_sd$`Short Shoot Density`, cal$sd_sd$`Short Shoot Density`)
+    scrs <- scrs |>
+      dplyr::mutate(
+        Abundance             = scales::rescale(abs(Abundance),
+                                  to = c(100, max(50, 50 - z_abu * k))),
+        `Blade Length`        = scales::rescale(abs(`Blade Length`),
+                                  to = c(100, max(50, 50 - z_bl  * k))),
+        `Short Shoot Density` = scales::rescale(abs(`Short Shoot Density`),
+                                  to = c(100, max(50, 50 - z_ss  * k))),
+        `Total` = (`Blade Length` + `Short Shoot Density` + Abundance) / 3
+      )
+  } else {
+    scrs <- scrs |>
+      dplyr::mutate(
+        dplyr::across(`Abundance`:`Short Shoot Density`, ~ scales::rescale(abs(.x), to = c(100, 50))),
+        `Total` = (`Blade Length` + `Short Shoot Density` + `Abundance`) / 3
+      )
+  }
 
   if(raw)
     return(scrs)
@@ -647,7 +716,7 @@ scrsum_fun <- function(allgrpscr, grp){
   if(totscr == grdlvs[length(grdlvs)])
     lower <- NULL
   
-  screxp <- 'Your group\'s overall score is based on a ranking relative to all other groups. The overall score is based on the average of the scores below for species abundance, blade length, and short shoot density. Each of these three scores is based on how close the reported values are to the overall averages ("true") across all groups participating in the transect training.  Reported values summarized for each species across all transects that deviate largely from the averages are given lower scores.  What is defined as "a lot" or "a little" deviation from the average varies by the measure. For example, smaller deviations from the average will be given lower scores if all groups scored similarly for a particular measure.  The "true" species list, from which all other scores are derived, is based on species (seagrass or macroalgae) that were reported by at least two groups as present.'
+  screxp <- 'Your group\'s overall score reflects how closely your reported values match the group averages, calibrated against historical performance across all training years. The overall score is based on the average of the scores below for species abundance, blade length, and short shoot density. Each of these three scores is based on how close the reported values are to the overall averages ("true") across all groups participating in the transect training.  Reported values summarized for each species across all transects that deviate largely from the averages are given lower scores.  In years where all groups perform similarly and accurately, scores will be high across the board.  The "true" species list, from which all other scores are derived, is based on species (seagrass or macroalgae) that were reported by at least two groups as present.'
   
   # ouput as list
   out <- paste0('
@@ -774,13 +843,16 @@ savspecies <- function(){
 #' @param usemon logical, return only groups that are within tbeptools::trnlns
 #' 
 #' @details some years have mroe than one group participating, e.g., two SWFWMD groups, scores are averaged in these cases
-allyrscr_fun <- function(trndat, na.rm = T, usemon = TRUE){
-  
+allyrscr_fun <- function(trndat, na.rm = T, usemon = TRUE, cal = NULL){
+
   data(file = 'trnlns', package = 'tbeptools')
-  
+
   grades <- c('A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D+', 'D')
   grdbrk <- c(101, 95, 90, 85, 80, 75, 70, 65, 60, 55, 0)
-  
+
+  if(is.null(cal))
+    cal <- calibrate_scr_fun(trndat)
+
   yrs <- unique(trndat$yr)
   
   out <- tibble::tibble(yr = yrs) |> 
@@ -790,7 +862,7 @@ allyrscr_fun <- function(trndat, na.rm = T, usemon = TRUE){
         
         truvar <- truvar_fun(trndat, x)
         
-        out <- allgrpscr_fun(trndat, x, truvar, raw = T)
+        out <- allgrpscr_fun(trndat, x, truvar, raw = T, cal = cal)
         
         return(out)
         
