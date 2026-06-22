@@ -711,7 +711,7 @@ scrsum_fun <- function(allgrpscr, grp){
   if(totscr == grdlvs[length(grdlvs)])
     lower <- NULL
   
-  screxp <- 'Your group\'s overall score reflects how closely your reported values match the group averages, calibrated against historical performance across all training years. The overall score is based on the average of the scores below for species abundance, blade length, and short shoot density. Each of these three scores is based on how close the reported values are to the overall averages ("true") across all groups participating in the transect training.  Reported values summarized for each species across all transects that deviate largely from the averages are given lower scores.  In years where all groups perform similarly and accurately, scores will be high across the board.  The "true" species list, from which all other scores are derived, is based on species (seagrass or macroalgae) that were reported by at least two groups as present.'
+  screxp <- 'Your group\'s overall score reflects how closely your reported values match the group averages, calibrated against historical performance across all training years. The overall score is based on the average of the scores below for species abundance, blade length, and short shoot density. To learn more about how scores are calculated, check out the <a target="_blank" href="https://tbep-tech.github.io/seagrasstransect-training-reports/scoring.html">scoring document</a>.'
   
   # ouput as list
   out <- paste0('
