@@ -160,24 +160,26 @@ truvar_fun <- function(trndat, yr){
   abulev <- c('0', '0.1', '0.5', '1', '2', '3', '4', '5')
   abulab <- c('no coverage', 'solitary', 'few', '<5%', '5-25%', '25-50%', '51-75%', '76-100%')
 
+  abulev_num <- c(0, 0.1, 0.5, 1, 2, 3, 4, 5)
+
   out <- trndat |>
     dplyr::filter(yr == !!yr) |>
     dplyr::semi_join(truespp, by = c('Site', 'Species')) |>
     tidyr::pivot_wider(names_from = var, values_from = aveval) |>
     dplyr::mutate(
-      Abundance = factor(Abundance, levels = abulev), 
       Abundance = as.numeric(Abundance)
-    ) |> 
+    ) |>
     dplyr::summarise(
-      Abundance = round(mean(Abundance, na.rm = T), 0),
+      Abundance = mean(Abundance, na.rm = T),
       `Blade Length` = mean(`Blade Length`, na.rm = T),
-      `Short Shoot Density` = mean(`Short Shoot Density`, na.rm = T), 
+      `Short Shoot Density` = mean(`Short Shoot Density`, na.rm = T),
       .by = c(Site, Species)
-    ) |> 
+    ) |>
     dplyr::mutate(
-      Abundance = factor(Abundance, levels = seq_along(abulev), labels = abulev),
-      Abundance = as.numeric(as.character(Abundance))
-    ) |> 
+      Abundance = sapply(Abundance, function(x) {
+        if (is.na(x)) NA_real_ else abulev_num[which.min(abs(x - abulev_num))]
+      })
+    ) |>
     tidyr::pivot_longer(
       cols = -c(Site, Species),
       names_to = 'var',
@@ -475,8 +477,8 @@ card_fun <- function(evalgrp, grp, allgrpscr, vr = c('Abundance', 'Blade Length'
   hovtxttr <- paste0('True, ', sppdiff$truval)
   hovtxtrp <- paste0('Reported, ', sppdiff$aveval)
   if(vr == 'Abundance'){
-    abulv <- 0:7
-    abulb <- c('no coverage', 'solitary', 'few', '<5%', '5-25%', '25-50%', '51-75%', '76-100%')
+    abulv <- 1:8
+    abulb <- c('no coverage', 'solitary', 'few', '<5%', '5-25%', '26-50%', '51-75%', '76-100%')
     yxs <- list(title = ttl, tickvals = abulv, ticktext = abulb)
     hovtxttr <- paste0('True, ', factor(sppdiff$truval, levels = abulv, labels = abulb))
     hovtxtrp <- paste0('Reported, ', factor(sppdiff$aveval, levels = abulv, labels = abulb))
@@ -557,8 +559,8 @@ card_fun <- function(evalgrp, grp, allgrpscr, vr = c('Abundance', 'Blade Length'
 #'
 #' @param trndat data frame, training data
 #'
-#' @return named list with elements \code{mean_sd} and \code{sd_sd}, each a
-#'   named list of per-metric values
+#' @return named list with element \code{mean_sd}, a named list of per-metric
+#'   historical mean within-year spreads
 calibrate_scr_fun <- function(trndat){
 
   yrs <- unique(trndat$yr)
@@ -576,10 +578,6 @@ calibrate_scr_fun <- function(trndat){
     mean_sd = yr_spreads |>
       dplyr::summarise(dplyr::across(Abundance:`Short Shoot Density`,
                                      ~ mean(.x, na.rm = TRUE))) |>
-      as.list(),
-    sd_sd = yr_spreads |>
-      dplyr::summarise(dplyr::across(Abundance:`Short Shoot Density`,
-                                     ~ sd(.x, na.rm = TRUE))) |>
       as.list()
   )
 
@@ -593,7 +591,8 @@ calibrate_scr_fun <- function(trndat){
 #' @param raw logical, return raw scores, otherwise letter grades
 #' @param raw_diff logical, return pre-rescale weighted-mean absolute deviations
 #' @param cal named list of per-metric calibration constants from \code{\link{calibrate_scr_fun}}
-allgrpscr_fun <- function(trndat, yr, truvar, raw = F, raw_diff = FALSE, cal = NULL){
+#' @param k numeric, maximum floor lift in grade-points when all groups agree perfectly (default 25, giving a B- floor)
+allgrpscr_fun <- function(trndat, yr, truvar, raw = F, raw_diff = FALSE, cal = NULL, k = 25){
 
   scrs <- trndat |> 
     dplyr::filter(yr == !!yr) |> 
@@ -624,23 +623,19 @@ allgrpscr_fun <- function(trndat, yr, truvar, raw = F, raw_diff = FALSE, cal = N
     return(scrs)
 
   if(!is.null(cal)){
-    # z-score this year's within-year spread against historical; negative z = tight year
+    # ratio of this year's within-year spread to historical mean; < 1 means tight year
     yr_sd <- scrs |>
       dplyr::summarise(dplyr::across(Abundance:`Short Shoot Density`,
                                      ~ sd(.x, na.rm = TRUE)))
-    safe_z <- function(val, mn, s) ifelse(is.na(s) | s == 0, 0, (val - mn) / s)
-    k <- 15  # grade-points of floor lift per SD below average; increase to amplify
-    z_abu <- safe_z(yr_sd$Abundance,          cal$mean_sd$Abundance,          cal$sd_sd$Abundance)
-    z_bl  <- safe_z(yr_sd$`Blade Length`,     cal$mean_sd$`Blade Length`,     cal$sd_sd$`Blade Length`)
-    z_ss  <- safe_z(yr_sd$`Short Shoot Density`, cal$mean_sd$`Short Shoot Density`, cal$sd_sd$`Short Shoot Density`)
+    safe_ratio <- function(val, mn) ifelse(is.na(mn) | mn == 0, 1, val / mn)
+    floor_abu <- max(50, 50 + (1 - safe_ratio(yr_sd$Abundance,             cal$mean_sd$Abundance))             * k)
+    floor_bl  <- max(50, 50 + (1 - safe_ratio(yr_sd$`Blade Length`,        cal$mean_sd$`Blade Length`))        * k)
+    floor_ss  <- max(50, 50 + (1 - safe_ratio(yr_sd$`Short Shoot Density`, cal$mean_sd$`Short Shoot Density`)) * k)
     scrs <- scrs |>
       dplyr::mutate(
-        Abundance             = scales::rescale(abs(Abundance),
-                                  to = c(100, max(50, 50 - z_abu * k))),
-        `Blade Length`        = scales::rescale(abs(`Blade Length`),
-                                  to = c(100, max(50, 50 - z_bl  * k))),
-        `Short Shoot Density` = scales::rescale(abs(`Short Shoot Density`),
-                                  to = c(100, max(50, 50 - z_ss  * k))),
+        Abundance             = scales::rescale(abs(Abundance),             to = c(100, floor_abu)),
+        `Blade Length`        = scales::rescale(abs(`Blade Length`),        to = c(100, floor_bl)),
+        `Short Shoot Density` = scales::rescale(abs(`Short Shoot Density`), to = c(100, floor_ss)),
         `Total` = (`Blade Length` + `Short Shoot Density` + Abundance) / 3
       )
   } else {

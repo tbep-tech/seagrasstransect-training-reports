@@ -7,6 +7,7 @@ format:
     toc-depth: 3
     toc-title: "Contents"
     css: ../styles.css
+lightbox: true
 execute:
   echo: false
   warning: false
@@ -113,7 +114,7 @@ The consensus list is created per transect, so a species may be on the list at o
 
 For each consensus species at each transect, true values are calculated as the cross-group average:
 
-- **Abundance**: group Braun-Blanquet categories are converted to their numeric level (1–8), averaged across groups, then converted back to the nearest BB value.
+- **Abundance**: group Braun-Blanquet values (0, 0.1, 0.5, 1, 2, 3, 4, 5) are averaged directly across groups, then snapped to the nearest valid BB value (no coverage, solitary, few, <5%, 5-25%, 26-50%, 51-75%, 76-100%).
 - **Blade Length** and **Short Shoot Density**: simple means across groups.
 
 Only consensus species enter this calculation. This prevents a misidentified species (recorded by only one group) from distorting the true values for everyone else.
@@ -210,39 +211,36 @@ sppdiff_fun(evalgrp, 'Abundance') |>
   gt::opt_stylize(style = 1, color = 'blue')
 ```
 
----
-
 ## Step 5: Score Calibration
 
-Raw metric scores are converted to a 0–100 scale. Without calibration, the best group in any year always maps to ~100 and the worst always maps to ~50, regardless of how closely groups agreed. This means a year where everyone performed very well would still produce a spread from A to D, which needs to be accounted for to avoid an unfair outcome.
+Raw metric scores are converted to a 0–100 scale. Without calibration, the best group in any year always maps to 100 and the worst always maps to 50, regardless of how closely groups agreed. This means a year where everyone performed very well would still produce a spread from A to D, which needs to be accounted for to avoid an unfair outcome.
 
-To address this, the score floor (the minimum possible score) is raised in years when all groups agree closely with each other, and kept at 50 in years when disagreement is typical or high.
+To address this, the score floor (the minimum possible score) is raised in years when all groups agree closely with each other, and kept at 50 in years when disagreement is high.
 
 ### How calibration works
 
-For each year and metric, we compute the **within-year standard deviation** of group deviations — a measure of how spread out the groups were. Across all training years, these yearly spreads are standardised to z-scores. A negative z-score means groups agreed more than usual; a positive z-score means more disagreement than usual.
+For each year and metric, we compute the within-year standard deviation of group deviations to assess the spread between groups. This is then expressed as a ratio to the historical mean spread across all training years. A ratio below 1 means groups agreed more closely than usual; a ratio above 1 means more disagreement than usual.
 
 The score floor for a given year and metric is:
 
 $$
-\text{floor} = \max\!\left(50,\ 50 - z \times 15\right)
+\text{floor} = \max\!\left(50,\ 50 + \left(1 - \frac{\text{SD}_{\text{year}}}{\overline{\text{SD}}}\right) \times 25\right)
 $$
 
-where $z$ is the z-score of within-year spread for that metric and year, and 15 is a scaling constant (grade-points per standard deviation). A year that is 1 SD tighter than average gets a floor of 65; 2 SDs tighter gets a floor of 80. Loose years (positive z) are capped at 50 — no extra penalty beyond the standard range.
+where $\text{SD}_{\text{year}}$ is the within-year spread for that metric and year, $\overline{\text{SD}}$ is its historical mean, and 25 is a scaling constant that sets the maximum possible floor lift (grade-points). Choosing the scaling constant is subjective and determines the basis for how similar scores should be when deviation between groups in a year is tight.  Raising the value makes the scores more similar and lowering the value makes them more spread out. The maximum lift occurs when all groups agree perfectly (ratio = 0), giving a floor of $50 + 25 = 75$, which corresponds to a minimum grade of B-. A year at the historical average (ratio = 1) receives no adjustment and keeps a floor of 50. Loose years (ratio > 1) are capped at 50 so that no extra penalty is applied beyond the standard range.
 
 ```{r}
 #| label: fig-calibration
-#| fig-cap: "Within-year spread of group deviations for each metric and year. Bar colour shows the z-score; the dashed line is the historical mean. Bar labels show the z-score and the resulting score floor. Blue (negative z) years are tighter than average and receive a higher score floor."
-#| fig-height: 4
+#| fig-cap: "Within-year spread of group deviations for each metric and year. Bar colour shows the ratio of each year's spread to the historical mean (dashed line). Bar labels show the ratio and the resulting score floor. Blue (ratio < 1) years are tighter than average and receive a higher score floor."
+#| fig-height: 5
+#| fig-width: 9.5
 
 yrs <- sort(unique(trndat$yr))
 
 cal_lkp <- tibble::tibble(
   metric  = c('Abundance', 'Blade Length', 'Short Shoot Density'),
   mean_sd = c(cal$mean_sd$Abundance, cal$mean_sd$`Blade Length`,
-              cal$mean_sd$`Short Shoot Density`),
-  sd_sd   = c(cal$sd_sd$Abundance,   cal$sd_sd$`Blade Length`,
-              cal$sd_sd$`Short Shoot Density`)
+              cal$mean_sd$`Short Shoot Density`)
 )
 
 yr_spreads <- purrr::map(yrs, function(yr){
@@ -256,29 +254,29 @@ yr_spreads <- purrr::map(yrs, function(yr){
   tidyr::pivot_longer(-yr, names_to = 'metric', values_to = 'sd_avediff') |>
   dplyr::left_join(cal_lkp, by = 'metric') |>
   dplyr::mutate(
-    z_score   = (sd_avediff - mean_sd) / sd_sd,
-    floor_adj = as.integer(pmax(50, 50 - z_score * 15)),
+    ratio     = sd_avediff / mean_sd,
+    floor_adj = as.integer(pmax(50, 50 + (1 - ratio) * 25)),
     metric    = factor(metric, levels = c('Abundance', 'Blade Length', 'Short Shoot Density'))
   )
 
-ggplot(yr_spreads, aes(x = factor(yr), y = sd_avediff, fill = z_score)) +
+ggplot(yr_spreads, aes(x = factor(yr), y = sd_avediff, fill = ratio)) +
   geom_col(width = 0.7, colour = 'grey40', linewidth = 0.3) +
   geom_hline(aes(yintercept = mean_sd), linetype = 'dashed', linewidth = 0.6) +
-  geom_text(aes(label = sprintf('z=%.1f\nfloor=%d', z_score, floor_adj)),
+  geom_text(aes(label = sprintf('ratio=%.2f\nfloor=%d', ratio, floor_adj)),
             vjust = -0.25, size = 2.5, lineheight = 0.9) +
   scale_fill_gradient2(low = '#2166ac', mid = '#f7f7f7', high = '#d73027',
-                       midpoint = 0, name = 'Z-score') +
+                       midpoint = 1, name = 'Ratio') +
   scale_y_continuous(expand = expansion(mult = c(0, 0.28))) +
   facet_wrap(~ metric, scales = 'free_y', nrow = 1) +
   labs(x = NULL, y = 'Within-year SD of group deviations') +
   theme_bw(base_size = 10) +
-  theme(legend.position = 'right',
+  theme(legend.position = 'bottom',
         axis.text.x = element_text(angle = 45, hjust = 1),
         strip.background = element_rect(fill = '#004F7E'),
         strip.text = element_text(colour = 'white', face = 'bold'))
 ```
 
-### Effect on scores: a tight vs. loose year
+### Effect on scores: tight vs. loose year
 
 The table below compares the calibrated score floor for each year and metric, illustrating how the floor shifts in tighter training years.
 
@@ -294,7 +292,7 @@ yr_spreads |>
   gt::data_color(
     columns = c(Abundance, `Blade Length`, `Short Shoot Density`),
     fn = scales::col_numeric(
-      palette = c('#d73027', '#f7f7f7', '#2166ac'),
+      palette = rev(c('#f7f7f7', '#2166ac')),
       domain = c(50, 85),
       reverse = TRUE
     )
@@ -302,8 +300,6 @@ yr_spreads |>
   gt::cols_align('center', columns = -Year) |>
   gt::opt_stylize(style = 1, color = 'blue')
 ```
-
----
 
 ## Step 6: Letter Grades
 
@@ -325,8 +321,6 @@ tibble::tibble(
 
 The Total score is the unweighted average of the Abundance, Blade Length, and Short Shoot Density numeric scores, then converted to a letter grade using the same thresholds.
 
----
-
 ## Worked Example
 
 ```{r}
@@ -337,13 +331,13 @@ ex_grpscr_raw <- allgrpscr_fun(trndat, ex_yr, truvar, cal = cal, raw = TRUE) |>
   dplyr::filter(grpact == ex_grp)
 ```
 
-The following walks through the full scoring pipeline for **`r ex_grp_label`** in **`r ex_yr`**.
+The following walks through the full scoring pipeline for group `r ex_grp_label` in `r ex_yr`.
 
 ### Raw deviations
 
 ```{r}
 #| label: tbl-example-sppdiff
-#| tbl-cap: !expr paste0("Per-species deviations across all metrics for group '", ex_grp_label, "' in ", ex_yr, ".")
+#| tbl-cap: !expr paste0("Per-species deviations across all metrics for group ", ex_grp_label, " in ", ex_yr, ".")
 
 purrr::map(c('Abundance', 'Blade Length', 'Short Shoot Density'), function(vr){
   sppdiff_fun(evalgrp, vr) |>
@@ -370,7 +364,7 @@ purrr::map(c('Abundance', 'Blade Length', 'Short Shoot Density'), function(vr){
 
 ```{r}
 #| label: tbl-example-scores
-#| tbl-cap: !expr paste0("Final scores for group '", ex_grp_label, "' in ", ex_yr, " — numeric (calibrated) and letter grade.")
+#| tbl-cap: !expr paste0("Final scores for group ", ex_grp_label, " in ", ex_yr, " showing the numeric score (calibrated) and letter grade.")
 
 dplyr::bind_rows(
   ex_grpscr_raw |>
@@ -399,11 +393,11 @@ dplyr::bind_rows(
 
 ```{r}
 #| label: tbl-example-cal
-#| tbl-cap: !expr paste0("Effect of calibration on scores for group '", ex_grp_label, "' in ", ex_yr, ". The floor is the lowest possible score any group could receive in this year for each metric.")
+#| tbl-cap: !expr paste0("Effect of calibration on scores for group ", ex_grp_label, " in ", ex_yr, ". The floor is the lowest possible score any group could receive in this year for each metric.")
 
 yr_spreads_wide <- yr_spreads |>
   dplyr::filter(yr == ex_yr) |>
-  dplyr::select(metric, z_score, floor_adj)
+  dplyr::select(metric, ratio, floor_adj)
 
 ex_grpscr_nocal_raw <- allgrpscr_fun(trndat, ex_yr, truvar, raw = TRUE) |>
   dplyr::filter(grpact == ex_grp) |>
@@ -419,14 +413,14 @@ dplyr::left_join(ex_grpscr_nocal_raw, ex_grpscr_cal_raw, by = 'metric') |>
   dplyr::filter(metric != 'Total') |>
   dplyr::mutate(
     dplyr::across(c(score_before, score_after), ~ round(as.numeric(.), 1)),
-    z_score = round(z_score, 2),
+    ratio = round(ratio, 2),
     floor_adj = as.integer(floor_adj)
   ) |>
   dplyr::rename(
     Metric = metric,
     `Score without calibration` = score_before,
     `Score with calibration` = score_after,
-    `Z-score (within-year spread)` = z_score,
+    `Ratio (within-year spread / historical mean)` = ratio,
     `Score floor` = floor_adj
   ) |>
   dplyr::mutate(
@@ -438,4 +432,4 @@ dplyr::left_join(ex_grpscr_nocal_raw, ex_grpscr_cal_raw, by = 'metric') |>
   gt::opt_stylize(style = 1, color = 'blue')
 ```
 
-A negative Z-score (tighter than average cohort) raises the floor for all groups, including this one. A floor of 50 means no calibration adjustment was applied.
+A ratio below 1 (tighter than average cohort) raises the floor for all groups, including this one. A floor of 50 means no calibration adjustment was applied.
