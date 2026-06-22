@@ -3,6 +3,7 @@ title: "How Report Card Scores Are Calculated"
 format:
   html:
     embed-resources: true
+    html-table-processing: none
     toc: true
     toc-depth: 3
     toc-title: "Contents"
@@ -105,7 +106,15 @@ truespp |>
     locations = gt::cells_body(columns = Species)
   ) |>
   gt::cols_align('left') |>
-  gt::opt_stylize(style = 1, color = 'blue')
+  gt::tab_style(
+    style = list(gt::cell_fill(color = '#2166ac'), gt::cell_text(color = 'white', weight = 'bold')),
+    locations = gt::cells_column_labels()
+  ) |>
+  gt::tab_options(
+    table.border.top.color = '#2166ac',
+    table.border.bottom.color = '#2166ac',
+    column_labels.border.bottom.color = '#2166ac'
+  )
 ```
 
 The consensus list is created per transect, so a species may be on the list at one transect but not another.
@@ -138,7 +147,15 @@ truvar |>
     locations = gt::cells_body(columns = Species)
   ) |>
   gt::cols_align('left') |>
-  gt::opt_stylize(style = 1, color = 'blue')
+  gt::tab_style(
+    style = list(gt::cell_fill(color = '#2166ac'), gt::cell_text(color = 'white', weight = 'bold')),
+    locations = gt::cells_column_labels()
+  ) |>
+  gt::tab_options(
+    table.border.top.color = '#2166ac',
+    table.border.bottom.color = '#2166ac',
+    column_labels.border.bottom.color = '#2166ac'
+  )
 ```
 
 ## Step 3: Group Deviations and Species ID Penalties
@@ -175,7 +192,15 @@ evalgrp |>
     locations = gt::cells_body(columns = Species)
   ) |>
   gt::cols_align('left') |>
-  gt::opt_stylize(style = 1, color = 'blue')
+  gt::tab_style(
+    style = list(gt::cell_fill(color = '#2166ac'), gt::cell_text(color = 'white', weight = 'bold')),
+    locations = gt::cells_column_labels()
+  ) |>
+  gt::tab_options(
+    table.border.top.color = '#2166ac',
+    table.border.bottom.color = '#2166ac',
+    column_labels.border.bottom.color = '#2166ac'
+  )
 ```
 
 ## Step 4: Metric Scores
@@ -208,7 +233,15 @@ sppdiff_fun(evalgrp, 'Abundance') |>
     locations = gt::cells_body(columns = Species)
   ) |>
   gt::cols_align('left') |>
-  gt::opt_stylize(style = 1, color = 'blue')
+  gt::tab_style(
+    style = list(gt::cell_fill(color = '#2166ac'), gt::cell_text(color = 'white', weight = 'bold')),
+    locations = gt::cells_column_labels()
+  ) |>
+  gt::tab_options(
+    table.border.top.color = '#2166ac',
+    table.border.bottom.color = '#2166ac',
+    column_labels.border.bottom.color = '#2166ac'
+  )
 ```
 
 ## Step 5: Score Calibration
@@ -292,13 +325,22 @@ yr_spreads |>
   gt::data_color(
     columns = c(Abundance, `Blade Length`, `Short Shoot Density`),
     fn = scales::col_numeric(
-      palette = rev(c('#f7f7f7', '#2166ac')),
-      domain = c(50, 85),
-      reverse = TRUE
+      palette = c('#c6dbef', '#c7e9c0'),
+      domain = c(50, 75)
     )
   ) |>
+  gt::tab_style(
+    style = list(gt::cell_fill(color = '#2166ac'), gt::cell_text(color = 'white', weight = 'bold')),
+    locations = gt::cells_column_labels()
+  ) |>
   gt::cols_align('center', columns = -Year) |>
-  gt::opt_stylize(style = 1, color = 'blue')
+  gt::tab_options(
+    row.striping.include_table_body = FALSE,
+    row.striping.background_color = 'white',
+    table.border.top.color = '#2166ac',
+    table.border.bottom.color = '#2166ac',
+    column_labels.border.bottom.color = '#2166ac'
+  )
 ```
 
 ## Step 6: Letter Grades
@@ -316,7 +358,15 @@ tibble::tibble(
 ) |>
   gt::gt() |>
   gt::cols_align('center') |>
-  gt::opt_stylize(style = 1, color = 'blue')
+  gt::tab_style(
+    style = list(gt::cell_fill(color = '#2166ac'), gt::cell_text(color = 'white', weight = 'bold')),
+    locations = gt::cells_column_labels()
+  ) |>
+  gt::tab_options(
+    table.border.top.color = '#2166ac',
+    table.border.bottom.color = '#2166ac',
+    column_labels.border.bottom.color = '#2166ac'
+  )
 ```
 
 The Total score is the unweighted average of the Abundance, Blade Length, and Short Shoot Density numeric scores, then converted to a letter grade using the same thresholds.
@@ -357,7 +407,11 @@ purrr::map(c('Abundance', 'Blade Length', 'Short Shoot Density'), function(vr){
     locations = gt::cells_row_groups()
   ) |>
   gt::cols_align('left') |>
-  gt::opt_stylize(style = 1, color = 'blue')
+  gt::tab_options(
+    table.border.top.color = '#004F7E',
+    table.border.bottom.color = '#004F7E',
+    column_labels.border.bottom.color = '#004F7E'
+  )
 ```
 
 ### Scores
@@ -386,7 +440,15 @@ dplyr::bind_rows(
     style = gt::cell_text(weight = 'bold'),
     locations = gt::cells_body(rows = Metric == 'Total')
   ) |>
-  gt::opt_stylize(style = 1, color = 'blue')
+  gt::tab_style(
+    style = list(gt::cell_fill(color = '#2166ac'), gt::cell_text(color = 'white', weight = 'bold')),
+    locations = gt::cells_column_labels()
+  ) |>
+  gt::tab_options(
+    table.border.top.color = '#2166ac',
+    table.border.bottom.color = '#2166ac',
+    column_labels.border.bottom.color = '#2166ac'
+  )
 ```
 
 ### How the calibration affected this group's scores
@@ -429,7 +491,15 @@ dplyr::left_join(ex_grpscr_nocal_raw, ex_grpscr_cal_raw, by = 'metric') |>
   dplyr::arrange(Metric) |>
   gt::gt() |>
   gt::cols_align('center', columns = -Metric) |>
-  gt::opt_stylize(style = 1, color = 'blue')
+  gt::tab_style(
+    style = list(gt::cell_fill(color = '#2166ac'), gt::cell_text(color = 'white', weight = 'bold')),
+    locations = gt::cells_column_labels()
+  ) |>
+  gt::tab_options(
+    table.border.top.color = '#2166ac',
+    table.border.bottom.color = '#2166ac',
+    column_labels.border.bottom.color = '#2166ac'
+  )
 ```
 
 A ratio below 1 (tighter than average cohort) raises the floor for all groups, including this one. A floor of 50 means no calibration adjustment was applied.
