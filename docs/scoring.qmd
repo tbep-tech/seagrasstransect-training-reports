@@ -35,39 +35,54 @@ truvar   <- truvar_fun(trndat, ex_yr)
 cal      <- calibrate_scr_fun(trndat)
 allgrpscr <- allgrpscr_fun(trndat, ex_yr, truvar, cal = cal)
 
-# pick the median-scoring group as the "worked example" group
-ex_grp <- allgrpscr |>
-  dplyr::arrange(as.numeric(factor(Total,
-    levels = c('A','A-','B+','B','B-','C+','C','C-','D+','D')))) |>
-  dplyr::slice(ceiling(n() / 2)) |>
-  dplyr::pull(grpact)
+# non sav species
+non <- '^AA|^DA|^DB|^DG|^DR|^CYAN'
 
-ex_grp_label <- gsub('^\\d{4}:\\s', '', ex_grp)
+# # pick the median-scoring group as the "worked example" group
+# ex_grp <- allgrpscr |>
+#   dplyr::arrange(as.numeric(factor(Total,
+#     levels = c('A','A-','B+','B','B-','C+','C','C-','D+','D')))) |>
+#   dplyr::slice(ceiling(n() / 2)) |>
+#   dplyr::pull(grpact)
+
+# example group
+ex_grp <- trndat |> 
+  dplyr::filter(yr == ex_yr) |>
+  dplyr::filter(grp == 'C') |> 
+  dplyr::pull(grpact) |> 
+  unique()
+
+ex_grp_label <- trndat |> 
+  dplyr::filter(grpact == ex_grp) |>
+  dplyr::pull(grp) |>
+  unique()
 
 evalgrp <- evalgrp_fun(trndat, ex_yr, ex_grp, truvar)
 ```
 
 ## Overview
 
-Each year, multiple monitoring groups survey the same seagrass transects independently. Because there is no single external ground truth, scores are based on **how consistently groups agree with each other**. A group that reports values close to the cross-group average earns a high score and one that deviates substantially earns a lower score.
+Seagrass transects are monitored in Tampa Bay each year by multiple resource management agencies.  To support these efforts, the Tampa Bay Estuary Program coordinates an annual intercalibration training prior to the field season.  This intercalibration effort ensures that all participating groups are using consistent methods and interpretations. Seagrasses are independently assessed by each group at the same locations and the results are compared using report cards. This document describes how the report cards are prepared and what the scores mean.  The intent is to provide each group with a general indication of how closely their measurements align with the consensus of all groups and to identify areas for improvement.
+
+Because there is no single external ground truth, scores are based on how consistently groups agree with each other. A group that reports values close to the cross-group average earns a high score and one that deviates substantially earns a lower score.
 
 Scores are calculated for three field measurements:
 
-- **Abundance** — Braun-Blanquet cover category (0, 0.1, 0.5, 1, 2, 3, 4, 5)
-- **Blade Length** — average blade length in cm
-- **Short Shoot Density** — shoots per m²
+- **Abundance**: Braun-Blanquet cover category (0, 0.1, 0.5, 1, 2, 3, 4, 5)
+- **Blade Length**: average blade length in cm
+- **Short Shoot Density**: shoots per m²
 
-These three metric scores are averaged into an overall **Total** score, which is then converted to a letter grade.
+Taxa (seagrass and macroalgae, if present) observed relative to other groups is also considered. These three metric scores are averaged into an overall total score, which is then converted to a letter grade.
 
----
+Note that "transect" is used herein to describe the intercalibration sites, which are quadrats at fixed locations.  For the actual transect sampling, sites are set meter marks along a transect line.
 
 ## Step 1: The Consensus Species List
 
-Not every species recorded across all groups counts toward scoring. A species at a given transect is considered **truly present** only if **at least two distinct groups** reported it with non-zero abundance. This filters out likely misidentifications while still being inclusive — a species does not need to be unanimous, just corroborated.
+Not every species recorded across all groups counts toward scoring. A species at a given transect (site/quadrat) is considered present if at least two distinct groups reported it with non-zero abundance. This removes likely misidentifications while still being inclusive, i.e., a species does not need to be unanimous, just corroborated.
 
 ```{r}
 #| label: tbl-truespp
-#| tbl-cap: !expr paste("Consensus species at each transect in", ex_yr, "— species reported as non-zero by ≥2 groups.")
+#| tbl-cap: !expr paste("Consensus species at each transect in", ex_yr, "- species reported by at least two groups.")
 
 truespp |>
   dplyr::count(Site, name = 'n_species') |>
@@ -78,9 +93,11 @@ truespp |>
         dplyr::pull(Species) |>
         sort() |>
         paste(collapse = ', ')
-    })
+    }), 
+    Site = as.numeric(Site)
   ) |>
   dplyr::rename(Transect = Site, `Species count` = n_species) |>
+  dplyr::arrange(Transect) |> 
   gt::gt() |>
   gt::tab_style(
     style = gt::cell_text(style = 'italic'),
@@ -90,13 +107,11 @@ truespp |>
   gt::opt_stylize(style = 1, color = 'blue')
 ```
 
-The consensus list is computed **per transect**, so a species may be on the list at one transect but not another.
-
----
+The consensus list is created per transect, so a species may be on the list at one transect but not another.
 
 ## Step 2: True Values
 
-For each consensus species at each transect, **true values** are calculated as the cross-group average:
+For each consensus species at each transect, true values are calculated as the cross-group average:
 
 - **Abundance**: group Braun-Blanquet categories are converted to their numeric level (1–8), averaged across groups, then converted back to the nearest BB value.
 - **Blade Length** and **Short Shoot Density**: simple means across groups.
@@ -105,18 +120,17 @@ Only consensus species enter this calculation. This prevents a misidentified spe
 
 ```{r}
 #| label: tbl-truvar
-#| tbl-cap: !expr paste("Example true values for transect 1 in", ex_yr, "— cross-group averages for consensus species.")
+#| tbl-cap: !expr paste('Example "true" values at one transect in', ex_yr, 'determined by cross-group averages for consensus species.')
 
 truvar |>
-  dplyr::filter(Site == min(as.numeric(Site))) |>
+  dplyr::filter(Site == '8') |> #min(as.numeric(Site))) |>
   tidyr::pivot_wider(names_from = var, values_from = truval) |>
   dplyr::mutate(
-    Abundance = as.character(Abundance),
-    `Blade Length` = ifelse(is.na(`Blade Length`), '—', sprintf('%.1f cm', `Blade Length`)),
-    `Short Shoot Density` = ifelse(is.na(`Short Shoot Density`), '—',
-                                   sprintf('%.0f per m²', `Short Shoot Density`))
+    `Abundance (0, 0.5, 1, 2, 3, 4, 5)` = as.character(Abundance),
+    `Blade Length (cm)` = ifelse(grepl(non, Species), 'NA', round(`Blade Length`, 1)),
+    `Short Shoot Density (per m²)` = ifelse(grepl(non, Species), 'NA', round(`Short Shoot Density`, 1))
   ) |>
-  dplyr::rename(Transect = Site) |>
+  dplyr::select(Transect = Site, Species, `Abundance (0, 0.5, 1, 2, 3, 4, 5)`, `Blade Length (cm)`, `Short Shoot Density (per m²)`) |>
   gt::gt() |>
   gt::tab_style(
     style = gt::cell_text(style = 'italic'),
@@ -126,34 +140,34 @@ truvar |>
   gt::opt_stylize(style = 1, color = 'blue')
 ```
 
-A dash (—) means that measurement was not recorded for that species at that transect.
-
----
-
 ## Step 3: Group Deviations and Species ID Penalties
 
-For each group, reported values are compared to the true values across all consensus species and transects. This comparison uses a **full join**, which naturally reveals two types of species identification errors:
+For each group, reported values are compared to the true values across all consensus species and transects. This comparison uses a full join, which reveals two types of species identification errors:
 
-**Missed species** — a consensus species is present but the group did not record it. The group's abundance for that species is treated as level 1 ("no coverage") when computing the deviation, applying a slight penalty.
+**Missed species**: a species is present but the group did not record it. The group's abundance for that species is treated as level 1 ("no coverage", numeric conversion for BB value 0) when computing the deviation, applying a slight penalty.
 
-**False positives** — the group recorded a species that is not on the consensus list (i.e., no other group confirmed it). The true abundance is treated as level 1, again applying a slight penalty.
+**False positives**: the group recorded a species that is not on the consensus list (i.e., no other group confirmed it). The true abundance is treated as level 1, again applying a slight penalty.
 
-These penalties only affect the **Abundance** score. Blade Length and Short Shoot Density cannot be meaningfully penalised for species that were not found, so those metrics use `na.rm = TRUE` when averaging.
+These penalties only affect the abundance score. Blade Length and Short Shoot Density cannot be meaningfully penalised for species that were not found.
 
 ```{r}
 #| label: tbl-evalgrp
-#| tbl-cap: !expr paste0("Reported vs. true values for group '", ex_grp_label, "' at one transect in ", ex_yr, ". A dash in the Reported column indicates a missed species; a dash in the True column indicates a false positive.")
+#| tbl-cap: !expr paste0('Reported vs. true values for group "', ex_grp_label, '" at one transect in ', ex_yr, '.')
 
 evalgrp |>
-  dplyr::filter(Site == min(as.numeric(Site))) |>
+  dplyr::filter(Site == '8') |>
   dplyr::select(
     Transect = Site, Species,
     `Abundance reported` = `Abundance aveval`,
     `Abundance true`     = `Abundance truval`,
     `Blade Length reported` = `Blade Length aveval`,
-    `Blade Length true`     = `Blade Length truval`
+    `Blade Length true`     = `Blade Length truval`, 
+    `Short Shoot Density reported` = `Short Shoot Density aveval`,
+    `Short Shoot Density true`     = `Short Shoot Density truval`
   ) |>
-  dplyr::mutate(dplyr::across(everything(), ~ ifelse(is.na(.), '—', as.character(.)))) |>
+  dplyr::mutate(dplyr::across(`Abundance reported`:`Abundance true`, ~ ifelse(is.na(.), '—', as.character(.)))) |>
+  dplyr::mutate(dplyr::across(`Blade Length reported`:`Short Shoot Density true`, ~ ifelse(grepl(non, Species), 'NA', as.character(.)))) |>
+  dplyr::arrange(Species) |>
   gt::gt() |>
   gt::tab_style(
     style = gt::cell_text(style = 'italic'),
@@ -163,11 +177,9 @@ evalgrp |>
   gt::opt_stylize(style = 1, color = 'blue')
 ```
 
----
-
 ## Step 4: Metric Scores
 
-For each metric, deviations from the true value are summarised per species across transects, then combined into a single number per group per metric. The combination uses a **weighted mean of absolute differences**, where the weight for each species is the inverse of the standard deviation of the true values across transects:
+For each metric (abundance, blade length, short shoot density), deviations from the true value are summarised per species across transects, then combined into a single number per group per metric. The combination uses a weighted mean of absolute differences, where the weight for each species is the inverse of the standard deviation of the true values across transects:
 
 $$
 \text{metric score}_{\text{raw}} = \sum_{\text{species}} \frac{|\bar{d}_s|}{1 + \sigma_s}
@@ -177,7 +189,7 @@ where $\bar{d}_s$ is the mean absolute deviation for species $s$ and $\sigma_s$ 
 
 ```{r}
 #| label: tbl-sppdiff
-#| tbl-cap: !expr paste0("Per-species deviation summary for group '", ex_grp_label, "' in ", ex_yr, " — Abundance metric.")
+#| tbl-cap: !expr paste0("Per-species deviation summary of the abundance metric for group '", ex_grp_label, "' in ", ex_yr, ".")
 
 sppdiff_fun(evalgrp, 'Abundance') |>
   dplyr::mutate(
@@ -202,9 +214,9 @@ sppdiff_fun(evalgrp, 'Abundance') |>
 
 ## Step 5: Score Calibration
 
-Raw metric scores are converted to a 0–100 scale. Without calibration, the best group in any year always maps to ~100 and the worst always maps to ~50, regardless of how closely groups agreed. This means a year where everyone performed very well would still produce a spread from A to D — an unfair outcome.
+Raw metric scores are converted to a 0–100 scale. Without calibration, the best group in any year always maps to ~100 and the worst always maps to ~50, regardless of how closely groups agreed. This means a year where everyone performed very well would still produce a spread from A to D, which needs to be accounted for to avoid an unfair outcome.
 
-To address this, the score floor (the minimum possible score) is **raised in years when all groups agree closely with each other**, and kept at 50 in years when disagreement is typical or high.
+To address this, the score floor (the minimum possible score) is raised in years when all groups agree closely with each other, and kept at 50 in years when disagreement is typical or high.
 
 ### How calibration works
 
