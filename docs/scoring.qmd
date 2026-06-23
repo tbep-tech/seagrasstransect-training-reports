@@ -70,7 +70,7 @@ Because there is no single external ground truth, scores are based on how consis
 
 Scores are calculated for three field measurements:
 
-- **Abundance**: Braun-Blanquet cover category (0, 0.1, 0.5, 1, 2, 3, 4, 5)
+- **Abundance**: Braun-Blanquet cover category (0 = No cover, 0.1 = Solitary, 0.5 = Few, 1 = <5%, 2 = 5-25%, 3 = 25-50%, 4 = 51-75%, 5 = 76-100%)
 - **Blade Length**: average blade length in cm
 - **Short Shoot Density**: shoots per m²
 
@@ -84,7 +84,7 @@ Not every species recorded across all groups counts toward scoring. A species at
 
 ```{r}
 #| label: tbl-truespp
-#| tbl-cap: !expr paste("Consensus species at each transect in", ex_yr, "- species reported by at least two groups.")
+#| tbl-cap: !expr paste("Consensus species at each transect in", ex_yr, "as species reported by at least two groups.")
 
 truespp |>
   dplyr::count(Site, name = 'n_species') |>
@@ -208,10 +208,28 @@ evalgrp |>
 For each metric (abundance, blade length, short shoot density), deviations from the true value are summarised per species across transects, then combined into a single number per group per metric. The combination uses a weighted mean of absolute differences, where the weight for each species is the inverse of the standard deviation of the true values across transects:
 
 $$
-\text{metric score}_{\text{raw}} = \sum_{\text{species}} \frac{|\bar{d}_s|}{1 + \sigma_s}
+\text{metric score}_{\text{raw}} = \frac{N}{D}
 $$
 
-where $\bar{d}_s$ is the mean absolute deviation for species $s$ and $\sigma_s$ is the standard deviation of the true values for that species across transects. Species where the true value varies a lot across transects (high $\sigma_s$) contribute less to the final score, since agreement there is inherently harder to achieve.
+where $N$ is the weighted sum of absolute deviations across species:
+
+$$
+N = \sum_s w_s\,|\bar{d}_s|
+$$
+
+and $D$ is the total weight across species:
+
+$$
+D = \sum_s w_s
+$$
+
+For both $N$ and $D$, the $w_s$ component is the per-species weight:
+
+$$
+w_s = \frac{1}{1 + \sigma_s}
+$$
+
+$\bar{d}_s$ is the mean absolute deviation for species $s$ and $\sigma_s$ is the standard deviation of the true values for that species across transects. Species where the true value varies a lot across transects (high $\sigma_s$) receive a lower weight $w_s$, so their deviations contribute less to $N$. Dividing by $D$ normalises the result so it stays on the scale of a typical deviation regardless of how many species are assessed.
 
 ```{r}
 #| label: tbl-sppdiff
@@ -244,9 +262,43 @@ sppdiff_fun(evalgrp, 'Abundance') |>
   )
 ```
 
+```{r}
+#| include: false
+spd_abu <- sppdiff_fun(evalgrp, 'Abundance') |>
+  dplyr::mutate(
+    sdtruv  = dplyr::coalesce(sdtruv, 0),
+    abs_dev = round(abs(avediff), 2),
+    sigma   = round(sdtruv, 2),
+    weight  = round(1 / (1 + sigma), 2),
+    contrib = round(abs_dev * weight, 2)
+  )
+N_abu <- round(sum(spd_abu$contrib), 2)
+D_abu <- round(sum(spd_abu$weight), 2)
+raw_abu <- round(N_abu / D_abu, 3)
+```
+
+To see how these combine into a raw metric score, consider the Abundance values for group `r ex_grp_label` in `r ex_yr` from Table 4. Taking the absolute values of the mean deviations, the `r nrow(spd_abu)` species have $|\bar{d}_s|$ of `r paste(spd_abu$abs_dev, collapse = ', ')` and $\sigma_s$ of `r paste(spd_abu$sigma, collapse = ', ')` (as variation across all groups for each species). The weights $w_s = 1/(1+\sigma_s)$ are `r paste(spd_abu$weight, collapse = ', ')`, giving per-species contributions $w_s|\bar{d}_s|$ of `r paste(spd_abu$contrib, collapse = ', ')`. Summing across species:
+
+$$N = `r paste(spd_abu$contrib, collapse = ' + ')` = `r N_abu`$$
+
+$$D = `r paste(spd_abu$weight, collapse = ' + ')` = `r D_abu`$$
+
+The raw Abundance score is $N/D = `r N_abu`/`r D_abu` = `r raw_abu`$, matching the Abundance value shown in Table 8.  This raw score is then scaled to a numeric score on a 0–100 scale, which is then converted to a letter grade(see next steps).
+
+It should be abundantly clear that using the weighted mean of the absolute differences is a more robust approach than simply averaging the raw deviations across species.  The weighted mean accounts for the fact that some species are more variable than others, and therefore should contribute less to the overall score.  This is particularly important when there are a small number of species, as is often the case in seagrass transects.
+
+As an example, if there was no deviation in scores among species, $\sigma_s$ would be 0 for all species, and the weights $w_s$ would all be 1.  The numerator $N$ would then be the sum of the absolute deviations, and the denominator $D$ would be the sum of the weights.  The raw metric score would then be the average of the absolute deviations.
+
+
+$$N = 1 + 0 + 1 = 2$$
+
+$$D = 1 + 1 + 1 = 3$$
+
+The raw Abundance score would then be $N/D = 2/3 = 0.667$, which is lower than the weighted mean.
+
 ## Step 5: Score Calibration
 
-Raw metric scores are converted to a 0–100 scale. Without calibration, the best group in any year always maps to 100 and the worst always maps to 50, regardless of how closely groups agreed. This means a year where everyone performed very well would still produce a spread from A to D, which needs to be accounted for to avoid an unfair outcome.
+Raw metric scores are converted to a 0–100 scale. Without calibration, the best group in any year always maps to 100 and the worst always maps to 50 (an a priori minimum score), regardless of how closely groups agreed. This means a year where everyone performed very well would still produce a spread from A to D, which needs to be accounted for to avoid an unfair outcome.
 
 To address this, the score floor (the minimum possible score) is raised in years when all groups agree closely with each other, and kept at 50 in years when disagreement is high.
 
@@ -345,7 +397,7 @@ yr_spreads |>
 
 ## Step 6: Letter Grades
 
-After calibration, each group's numeric score for each metric falls on a 0–100 scale. These are mapped to letter grades using fixed thresholds:
+After calibration, each group's numeric score for each metric falls on a 0–100 scale, with the lowest possible score in a given year defined by the calibrated score floor. These are mapped to letter grades using fixed thresholds:
 
 ```{r}
 #| label: tbl-grades
@@ -416,38 +468,221 @@ purrr::map(c('Abundance', 'Blade Length', 'Short Shoot Density'), function(vr){
 
 ### Scores
 
+For each metric, the per-species rows show the mean absolute deviation ($|\bar{d}_s|$), the SD of true values across transects ($\sigma_s$), and each species' contribution to the weighted mean raw score ($|\bar{d}_s|/(1+\sigma_s)$). The "Raw score" row shows the weighted mean (the output of Equation 1 in Step 4), the calibrated score floor, the rescaled numeric score, and the letter grade.
+
 ```{r}
 #| label: tbl-example-scores
-#| tbl-cap: !expr paste0("Final scores for group ", ex_grp_label, " in ", ex_yr, " showing the numeric score (calibrated) and letter grade.")
+#| tbl-cap: !expr paste0("Score derivation for group ", ex_grp_label, " in ", ex_yr, ". Per-species rows show the elements of Equation 1. The 'Raw score' row shows the weighted mean and its conversion to a calibrated numeric score via the score floor.")
 
-dplyr::bind_rows(
-  ex_grpscr_raw |>
-    tidyr::pivot_longer(-grpact, names_to = 'Metric', values_to = 'value') |>
-    dplyr::mutate(type = 'Numeric score', value = as.character(round(as.numeric(value), 1))),
-  ex_grpscr |>
-    tidyr::pivot_longer(-grpact, names_to = 'Metric', values_to = 'value') |>
-    dplyr::mutate(type = 'Letter grade')
-) |>
-  dplyr::select(-grpact) |>
-  tidyr::pivot_wider(names_from = type, values_from = value) |>
+# Pre-rescaling weighted mean deviation per metric for this group
+ex_rawd <- allgrpscr_fun(trndat, ex_yr, truvar, raw_diff = TRUE) |>
+  dplyr::filter(grpact == ex_grp)
+
+# Score floors for this year
+ex_floors <- yr_spreads |>
+  dplyr::filter(yr == ex_yr) |>
+  dplyr::select(metric, floor_adj) |>
+  dplyr::mutate(metric = as.character(metric))
+
+metrics_ord <- c('Abundance', 'Blade Length', 'Short Shoot Density')
+
+# Per-species contribution rows
+spp_rows <- purrr::map(metrics_ord, function(vr){
+  sppdiff_fun(evalgrp, vr) |>
+    dplyr::mutate(
+      sdtruv  = dplyr::coalesce(sdtruv, 0),
+      abs_dev = round(abs(avediff), 2),
+      sigma   = round(sdtruv, 2),
+      weight  = round(1 / (1 + sigma), 3),
+      contrib = round(abs_dev / (1 + sigma), 3)
+    ) |>
+    dplyr::transmute(
+      metric = vr, row_type = 'species', Species,
+      abs_dev, sigma, weight, contrib,
+      raw_score = NA_real_, floor_adj = NA_integer_,
+      numeric_score = NA_real_, grade = NA_character_
+    )
+}) |>
+  dplyr::bind_rows()
+
+# Summary rows: weighted mean raw score -> floor -> numeric score -> grade
+# weight and contrib columns show sums (denominator and numerator of the weighted mean)
+sum_rows <- purrr::map(metrics_ord, function(vr){
+  spp_vr <- spp_rows |> dplyr::filter(metric == vr)
+  tibble::tibble(
+    metric        = vr,
+    row_type      = 'summary',
+    Species       = 'Raw score (weighted mean)',
+    abs_dev       = NA_real_,
+    sigma         = NA_real_,
+    weight        = round(sum(spp_vr$weight, na.rm = TRUE), 3),
+    contrib       = round(sum(spp_vr$contrib, na.rm = TRUE), 3),
+    raw_score     = round(ex_rawd[[vr]], 3),
+    floor_adj     = as.integer(ex_floors$floor_adj[ex_floors$metric == vr]),
+    numeric_score = round(as.numeric(ex_grpscr_raw[[vr]]), 1),
+    grade         = ex_grpscr[[vr]]
+  )
+}) |>
+  dplyr::bind_rows()
+
+# Total row
+total_row <- tibble::tibble(
+  metric        = 'Total',
+  row_type      = 'total',
+  Species       = 'Average of three metric scores',
+  abs_dev       = NA_real_,
+  sigma         = NA_real_,
+  weight        = NA_real_,
+  contrib       = NA_real_,
+  raw_score     = NA_real_,
+  floor_adj     = NA_integer_,
+  numeric_score = round(as.numeric(ex_grpscr_raw$Total), 1),
+  grade         = ex_grpscr$Total
+)
+
+score_tbl <- dplyr::bind_rows(spp_rows, sum_rows, total_row) |>
   dplyr::mutate(
-    Metric = factor(Metric, levels = c('Abundance', 'Blade Length', 'Short Shoot Density', 'Total'))
+    metric   = factor(metric, levels = c(metrics_ord, 'Total')),
+    sort_key = dplyr::case_when(
+      row_type == 'species' ~ 1L,
+      row_type == 'summary' ~ 2L,
+      TRUE                  ~ 3L
+    )
   ) |>
-  dplyr::arrange(Metric) |>
-  gt::gt() |>
-  gt::cols_align('center', columns = -Metric) |>
+  dplyr::arrange(metric, sort_key, Species) |>
+  dplyr::select(-sort_key, -row_type)
+
+score_tbl |>
+  gt::gt(groupname_col = 'metric') |>
+  gt::cols_label(
+    Species       = 'Species',
+    abs_dev       = gt::html('|d̅<sub>s</sub>|'),
+    sigma         = gt::html('σ<sub>s</sub>'),
+    weight        = gt::html('w<sub>s</sub> = 1/(1+σ<sub>s</sub>)<br><em>(sums to D)</em>'),
+    contrib       = gt::html('|d̅<sub>s</sub>| × w<sub>s</sub><br><em>(sums to N)</em>'),
+    raw_score     = gt::html('Raw score<br><em>(N/D)</em>'),
+    floor_adj     = 'Score floor',
+    numeric_score = 'Numeric score',
+    grade         = 'Letter grade'
+  ) |>
+  gt::sub_missing(missing_text = '—') |>
+  gt::fmt_number(columns = c(abs_dev, sigma, weight, contrib), decimals = 2) |>
+  gt::fmt_number(columns = raw_score, decimals = 3) |>
+  gt::fmt_number(columns = numeric_score, decimals = 1) |>
+  gt::tab_style(
+    style = gt::cell_text(style = 'italic'),
+    locations = gt::cells_body(
+      columns = Species,
+      rows = !Species %in% c('Raw score (weighted mean)', 'Average of three metric scores')
+    )
+  ) |>
+  gt::tab_style(
+    style = list(gt::cell_fill(color = '#f0f0f0'), gt::cell_text(weight = 'bold')),
+    locations = gt::cells_body(rows = Species == 'Raw score (weighted mean)')
+  ) |>
   gt::tab_style(
     style = gt::cell_text(weight = 'bold'),
-    locations = gt::cells_body(rows = Metric == 'Total')
+    locations = gt::cells_body(rows = Species == 'Average of three metric scores')
+  ) |>
+  gt::tab_style(
+    style = list(gt::cell_fill(color = '#004F7E'), gt::cell_text(color = 'white', weight = 'bold')),
+    locations = gt::cells_row_groups()
   ) |>
   gt::tab_style(
     style = list(gt::cell_fill(color = '#2166ac'), gt::cell_text(color = 'white', weight = 'bold')),
     locations = gt::cells_column_labels()
   ) |>
+  gt::cols_align('center', columns = c(abs_dev, sigma, weight, contrib, raw_score, floor_adj, numeric_score, grade)) |>
+  gt::tab_source_note(
+    source_note = gt::html('For the Raw score row: the w<sub>s</sub> column shows D = &Sigma;w<sub>s</sub> and the |d̅<sub>s</sub>| &times; w<sub>s</sub> column shows N = &Sigma;(|d̅<sub>s</sub>| &times; w<sub>s</sub>). Raw score = N/D.')
+  ) |>
   gt::tab_options(
     table.border.top.color = '#2166ac',
     table.border.bottom.color = '#2166ac',
     column_labels.border.bottom.color = '#2166ac'
+  )
+```
+
+The figure below shows how raw scores map to numeric scores across all groups for each metric. The grey line is the linear rescaling anchored at 100 for the best group and at the score floor for the worst. Group `r ex_grp_label` is highlighted in blue.
+
+```{r}
+#| label: fig-rescale
+#| fig-cap: !expr paste0("Raw score to numeric score rescaling for all groups in ", ex_yr, " by metric. Each dot is one group; group ", ex_grp_label, " (blue) is highlighted with drop lines to both axes. The grey line is the linear mapping from the best group (lowest raw deviation, numeric score 100) to the worst (highest raw deviation, numeric score = score floor). The red dashed line shows the calibrated score floor.")
+#| fig-height: 4
+#| fig-width: 9.5
+
+all_rawd_long <- allgrpscr_fun(trndat, ex_yr, truvar, raw_diff = TRUE) |>
+  tidyr::pivot_longer(-grpact, names_to = 'metric', values_to = 'raw_score')
+
+all_num_long <- allgrpscr_fun(trndat, ex_yr, truvar, cal = cal, raw = TRUE) |>
+  dplyr::select(-Total) |>
+  tidyr::pivot_longer(-grpact, names_to = 'metric', values_to = 'numeric_score')
+
+ex_floors_long <- yr_spreads |>
+  dplyr::filter(yr == ex_yr) |>
+  dplyr::select(metric, floor_adj) |>
+  dplyr::mutate(metric = as.character(metric))
+
+plot_dat <- dplyr::left_join(all_rawd_long, all_num_long, by = c('grpact', 'metric')) |>
+  dplyr::left_join(ex_floors_long, by = 'metric') |>
+  dplyr::mutate(
+    is_example = grpact == ex_grp,
+    metric = factor(metric, levels = c('Abundance', 'Blade Length', 'Short Shoot Density'))
+  )
+
+line_dat <- plot_dat |>
+  dplyr::group_by(metric) |>
+  dplyr::summarise(
+    x_lo = min(raw_score),
+    x_hi = max(raw_score),
+    floor_adj = dplyr::first(floor_adj),
+    .groups = 'drop'
+  )
+
+ex_dat <- plot_dat |> dplyr::filter(is_example)
+
+ggplot(plot_dat, aes(x = raw_score, y = numeric_score)) +
+  geom_hline(
+    data = line_dat,
+    aes(yintercept = floor_adj),
+    colour = '#d73027', linetype = 'dashed', linewidth = 0.5
+  ) +
+  geom_segment(
+    data = line_dat,
+    aes(x = x_lo, xend = x_hi, y = 100, yend = floor_adj),
+    colour = 'grey50', linewidth = 0.8
+  ) +
+  geom_segment(
+    data = ex_dat,
+    aes(x = raw_score, xend = raw_score, y = numeric_score, yend = -Inf),
+    colour = '#2166ac', linetype = 'dotted', linewidth = 0.6
+  ) +
+  geom_segment(
+    data = ex_dat,
+    aes(x = -Inf, xend = raw_score, y = numeric_score, yend = numeric_score),
+    colour = '#2166ac', linetype = 'dotted', linewidth = 0.6
+  ) +
+  geom_point(data = plot_dat |> dplyr::filter(!is_example), colour = 'grey60', size = 3) +
+  geom_point(data = ex_dat, colour = '#2166ac', size = 4) +
+  geom_label(
+    data = ex_dat,
+    aes(label = paste0('raw = ', round(raw_score, 3), '\nscore = ', round(numeric_score, 1))),
+    hjust = -0.1, size = 2.8, colour = '#2166ac', fill = 'white',
+    label.size = 0.3, label.padding = unit(0.2, 'lines')
+  ) +
+  geom_text(
+    data = line_dat,
+    aes(x = x_hi, y = floor_adj, label = paste0('floor = ', floor_adj)),
+    hjust = 1, vjust = -0.5, size = 2.5, colour = '#d73027'
+  ) +
+  scale_y_continuous(breaks = seq(50, 100, 10), expand = expansion(mult = c(0.1, 0.05))) +
+  scale_x_continuous(expand = expansion(mult = c(0.05, 0.35))) +
+  facet_wrap(~ metric, scales = 'free_x', nrow = 1) +
+  labs(x = 'Raw score (weighted mean deviation)', y = 'Numeric score') +
+  theme_bw(base_size = 10) +
+  theme(
+    strip.background = element_rect(fill = '#004F7E'),
+    strip.text = element_text(colour = 'white', face = 'bold')
   )
 ```
 
