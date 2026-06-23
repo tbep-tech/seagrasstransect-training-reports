@@ -283,18 +283,102 @@ $$N = `r paste(spd_abu$contrib, collapse = ' + ')` = `r N_abu`$$
 
 $$D = `r paste(spd_abu$weight, collapse = ' + ')` = `r D_abu`$$
 
-The raw Abundance score is $N/D = `r N_abu`/`r D_abu` = `r raw_abu`$, matching the Abundance value shown in Table 8.  This raw score is then scaled to a numeric score on a 0–100 scale, which is then converted to a letter grade(see next steps).
+The raw Abundance score is $N/D = `r N_abu`/`r D_abu` = `r raw_abu`$, matching the Abundance value shown in Table 8.  This raw score is then scaled to a numeric score on a 0–100 scale, which is then converted to a letter grade (see next steps).
 
-It should be abundantly clear that using the weighted mean of the absolute differences is a more robust approach than simply averaging the raw deviations across species.  The weighted mean accounts for the fact that some species are more variable than others, and therefore should contribute less to the overall score.  This is particularly important when there are a small number of species, as is often the case in seagrass transects.
+### When weighting matters
 
-As an example, if there was no deviation in scores among species, $\sigma_s$ would be 0 for all species, and the weights $w_s$ would all be 1.  The numerator $N$ would then be the sum of the absolute deviations, and the denominator $D$ would be the sum of the weights.  The raw metric score would then be the average of the absolute deviations.
+The weight $w_s$ does not guarantee a lower raw score than a simple unweighted mean, rather it produces a more appropriate one. Whether the weighted N/D ends up lower or higher than the unweighted N/D depends on whether the high-$\sigma_s$ species carry above-average or below-average deviations. The two scenarios below use two hypothetical species to illustrate both cases.
 
+```{r}
+#| include: false
+make_scenario_tbl <- function(spp, sigma, abs_dev){
+  weight    <- round(1 / (1 + sigma), 2)
+  contrib_w <- round(abs_dev * weight, 3)
+  N_w  <- round(sum(contrib_w), 3)
+  D_w  <- round(sum(weight), 2)
+  ND_w <- round(N_w / D_w, 2)
+  N_uw  <- round(sum(abs_dev), 2)
+  D_uw  <- as.numeric(length(abs_dev))
+  ND_uw <- round(N_uw / D_uw, 2)
+  sp_rows <- tibble::tibble(
+    label = spp, sigma = sigma, abs_dev = abs_dev,
+    weight = weight, contrib_w = contrib_w, contrib_uw = abs_dev
+  )
+  sm_rows <- tibble::tibble(
+    label = c('N', 'D', 'N / D'),
+    sigma = NA_real_, abs_dev = NA_real_, weight = NA_real_,
+    contrib_w  = c(N_w,  D_w,  ND_w),
+    contrib_uw = c(N_uw, D_uw, ND_uw)
+  )
+  dplyr::bind_rows(sp_rows, sm_rows) |>
+    gt::gt() |>
+    gt::cols_label(
+      label      = '',
+      sigma      = gt::html('σ<sub>s</sub>'),
+      abs_dev    = gt::html('|d̅<sub>s</sub>|'),
+      weight     = gt::html('w<sub>s</sub>'),
+      contrib_w  = gt::html('<strong>Weighted</strong><br>w<sub>s</sub> × |d̅<sub>s</sub>|'),
+      contrib_uw = gt::html('<strong>Unweighted</strong><br>|d̅<sub>s</sub>|')
+    ) |>
+    gt::sub_missing(missing_text = '') |>
+    gt::tab_style(
+      style = list(gt::cell_fill(color = '#f0f0f0'), gt::cell_text(weight = 'bold')),
+      locations = gt::cells_body(rows = label %in% c('N', 'D', 'N / D'))
+    ) |>
+    gt::tab_style(
+      style = gt::cell_text(weight = 'bold', color = '#2166ac'),
+      locations = gt::cells_body(columns = contrib_w, rows = label == 'N / D')
+    ) |>
+    gt::tab_style(
+      style = gt::cell_text(weight = 'bold', color = '#d73027'),
+      locations = gt::cells_body(columns = contrib_uw, rows = label == 'N / D')
+    ) |>
+    gt::cols_align('center', columns = -label) |>
+    gt::tab_style(
+      style = list(gt::cell_fill(color = '#2166ac'), gt::cell_text(color = 'white', weight = 'bold')),
+      locations = gt::cells_column_labels()
+    ) |>
+    gt::tab_options(
+      table.border.top.color = '#2166ac',
+      table.border.bottom.color = '#2166ac',
+      column_labels.border.bottom.color = '#2166ac'
+    )
+}
+```
 
-$$N = 1 + 0 + 1 = 2$$
+**Scenario 1: weighting reduces the raw score**
 
-$$D = 1 + 1 + 1 = 3$$
+A group deviates little from a consistent species ($\sigma = 0$) but substantially from a highly variable one ($\sigma = 3$). The weight discounts Species B's large deviation because natural variability in true values across transects makes precise agreement inherently harder.
 
-The raw Abundance score would then be $N/D = 2/3 = 0.667$, which is lower than the weighted mean.
+```{r}
+#| label: tbl-scenario1
+#| tbl-cap: "Scenario 1: large deviation on the variable species. Weighted N/D (blue) is much lower than unweighted N/D (red), reflecting an appropriately reduced penalty for missing a naturally hard-to-pin-down species."
+make_scenario_tbl(
+  spp     = c('Species A (consistent, σ = 0)', 'Species B (variable, σ = 3)'),
+  sigma   = c(0, 3),
+  abs_dev = c(0.5, 4.0)
+)
+```
+
+Without weighting, Species B's deviation of 4.0 dominates the score (unweighted N/D = 2.25). With weighting, that deviation is reduced in influence because Species B is naturally variable, yielding a weighted N/D of 1.20 as a substantially better score that corrects for variation between groups. The group missed a hard target, and the scoring system appropriately reduces the penalty for that miss.
+
+**Scenario 2: weighting raises the raw score**
+
+Now the same group deviates heavily from the consistent species but nearly matches the variable one. Because agreement on a consistent species carries more information, the weighted mean penalizes the miss more harshly than the unweighted mean would.
+
+```{r}
+#| label: tbl-scenario2
+#| tbl-cap: "Scenario 2: large deviation on the consistent species. Weighted N/D (blue) is higher than unweighted N/D (red), appropriately penalising a large miss on the species where all groups should agree."
+make_scenario_tbl(
+  spp     = c('Species A (consistent, σ = 0)', 'Species B (variable, σ = 3)'),
+  sigma   = c(0, 3),
+  abs_dev = c(3.0, 0.5)
+)
+```
+
+Without weighting, Species B's near-zero deviation helps dilute the score (unweighted N/D = 1.75). With weighting, that good performance on a naturally variable species counts for less, yielding a weighted N/D of 2.50. This is the appropriate outcome since large miss on a species where all groups should agree is a genuine measurement error and should not be offset by being close on a species that varies widely by nature.
+
+The weight $w_s = 1/(1+\sigma_s)$ ensures that consistent species where cross-group agreement is expected and meaningful drive the score more than naturally variable species where some disagreement is expected regardless. The weighted mean does not systematically produce better or worse scores than a simple average because it produces scores that more accurately reflect genuine measurement quality.
 
 ## Step 5: Score Calibration
 
