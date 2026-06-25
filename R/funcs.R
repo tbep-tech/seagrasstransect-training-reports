@@ -591,8 +591,8 @@ calibrate_scr_fun <- function(trndat){
 #' @param raw logical, return raw scores, otherwise letter grades
 #' @param raw_diff logical, return pre-rescale weighted-mean absolute deviations
 #' @param cal named list of per-metric calibration constants from \code{\link{calibrate_scr_fun}}
-#' @param k numeric, maximum floor lift in grade-points when all groups agree perfectly (default 25, giving a B- floor)
-allgrpscr_fun <- function(trndat, yr, truvar, raw = F, raw_diff = FALSE, cal = NULL, k = 25){
+#' @param k numeric, maximum floor lift in grade-points when all groups agree perfectly (default 50, giving a floor of 100)
+allgrpscr_fun <- function(trndat, yr, truvar, raw = F, raw_diff = FALSE, cal = NULL, k = 50){
 
   scrs <- trndat |> 
     dplyr::filter(yr == !!yr) |> 

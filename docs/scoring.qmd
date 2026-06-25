@@ -64,23 +64,30 @@ evalgrp <- evalgrp_fun(trndat, ex_yr, ex_grp, truvar)
 
 ## Overview
 
-Seagrass transects are monitored in Tampa Bay each year by multiple resource management agencies.  To support these efforts, the Tampa Bay Estuary Program coordinates an annual intercalibration training prior to the field season.  This intercalibration effort ensures that all participating groups are using consistent methods and interpretations. Seagrasses are independently assessed by each group at the same locations and the results are compared using report cards. This document describes how the report cards are prepared and what the scores mean.  The intent is to provide each group with a general indication of how closely their measurements align with the consensus of all groups and to identify areas for improvement.
+Seagrass transects are monitored in Tampa Bay each year by multiple resource management agencies.  To support these efforts, the Tampa Bay Estuary Program coordinates an annual intercalibration training prior to the field season.  This intercalibration effort ensures that all participating groups are using consistent methods and interpretations. Seagrasses are independently assessed by each group at the same locations and the results are compared using report cards.  The intent of these report cards is to highlight areas where each group is doing well and where efforts could be improved to ensure consistency. This document describes how the report cards are prepared and what the scores mean.
 
-Because there is no single external ground truth, scores are based on how consistently groups agree with each other. A group that reports values close to the cross-group average earns a high score and one that deviates substantially earns a lower score.
+Because there is no single external ground truth, scores are based on how consistently groups agree with each other. A group that reports values close to the cross-group average for the year earns a high score and one that deviates substantially earns a lower score.
 
-Scores are calculated for three field measurements:
+Scores are calculated for three field measurements for each seagrass species:
 
-- **Abundance**: Braun-Blanquet cover category (0 = No cover, 0.1 = Solitary, 0.5 = Few, 1 = <5%, 2 = 5-25%, 3 = 25-50%, 4 = 51-75%, 5 = 76-100%)
+- **Abundance**: Braun-Blanquet (BB) cover category (0 = No cover, 0.1 = Solitary, 0.5 = Few, 1 = <5%, 2 = 5-25%, 3 = 25-50%, 4 = 51-75%, 5 = 76-100%)
 - **Blade Length**: average blade length in cm
 - **Short Shoot Density**: shoots per m²
 
 Whether each group correctly identified which species were present is also factored into the abundance score. These three metric scores are averaged into an overall total score, which is then converted to a letter grade.
 
-Note that "transect" is used herein to describe the intercalibration sites, which are quadrats at fixed locations.  For the actual transect sampling, sites are set meter marks along a transect line.
+Note that "transect" is used herein to describe the intercalibration sites during training, which are quadrats at fixed locations.  For the actual transect sampling, sites are set meter marks along a transect line.
+
+The following steps below outline the key methods used to calculate group scores.  The main points are:
+
+* Species identified by at least two groups count towards the "true" species list.
+* Scores are based on consensus among groups.  Groups that deviate from the consensus (using deviation from the average) receive lower scores.
+* Scores consider variability across transects.  Deviations for a metric where variability is high across transects aren't weighed as heavily when calculating the score.  Likewise, deviations for metrics with lower variability are penalized more heavily. 
+* Overall scores are mapped to letter grades using a traditional scoring curve.  The group with the smallest deviations from the averages automatically gets the highest grade and the group with the largest deviations automatically get the lowest grade.  However, the floor of the spread can be raised in years when all groups perform similarly. 
 
 ## Step 1: The Consensus Species List
 
-Not every species recorded across all groups counts toward scoring. A species at a given transect (site/quadrat) is considered present if at least two distinct groups reported it with non-zero abundance. This removes likely misidentifications while still being inclusive, i.e., a species does not need to be unanimous, just corroborated.
+Not every species recorded across all groups counts toward scoring. A species at a given transect (site/quadrat) is considered present if at least two distinct groups reported it with non-zero abundance. This removes likely misidentifications while still being inclusive, i.e., a species does not need to be unanimous, just corroborated.  Species identifications include seagrass and macroalgae, where the only the former is used to assess abundance, blade lengths, and short shoot density.
 
 ```{r}
 #| label: tbl-truespp
@@ -98,7 +105,7 @@ truespp |>
     }), 
     Site = as.numeric(Site)
   ) |>
-  dplyr::rename(Transect = Site, `Species count` = n_species) |>
+  dplyr::rename(Transect = Site, `Species count (richness)` = n_species) |>
   dplyr::arrange(Transect) |> 
   gt::gt() |>
   gt::tab_style(
@@ -162,17 +169,17 @@ truvar |>
 
 For each group, reported values are compared to the true values across all consensus species and transects. This comparison reveals two types of species identification errors:
 
-**Missed species**: a species is present but the group did not record it. The group's abundance for that species is treated as category 1 ("no coverage", BB value 0) when computing the deviation. The penalty scales with the true abundance of the missed species: missing a rare species is a small error, while missing a dominant one is a large error.
+**Missed species**: a species is present but the group did not record it. The group's abundance for that species is treated as "no coverage" (BB value 0) when computing the deviation. The penalty scales with the true abundance of the missed species: missing a rare species is a small error, while missing a dominant one is a large error.
 
-**False positives**: the group recorded a species that is not on the consensus list (i.e., no other group confirmed it). The true abundance is treated as category 1 ("no coverage", BB value 0). The penalty scales with how high the group's reported abundance was for that species.
+**False positives**: the group recorded a species that is not on the consensus list (i.e., no other group confirmed it). The true abundance is treated as "no coverage" (BB value 0). The penalty scales with how high the group's reported abundance was for that species.
 
 These penalties only affect the abundance score. Blade Length and Short Shoot Density cannot be meaningfully penalised for species that were not found.
 
-For Abundance, deviations are computed as differences in ordinal category positions rather than in raw Braun-Blanquet numeric values. The eight BB categories are treated as equally spaced steps (1 = no coverage through 8 = 76–100%), so a deviation of 1 means the group was one category apart from the true value, regardless of the numeric gap between those categories on the BB scale.
+For Abundance, deviations are computed as differences in ordinal category positions rather than in raw Braun-Blanquet numeric values. The eight BB categories are treated as equally spaced steps (1 = no coverage through 8 = 76–100%), so a deviation of 1 means the group was one category apart from the true value, regardless of the numeric gap between those categories on the BB scale.  This implicitly assumes that there is similar difficulty in distinguishing between lower abundances (e.g., solitary vs few) and higher abundances (e.g., 51-75% vs 76-100%).
 
 ```{r}
 #| label: tbl-evalgrp
-#| tbl-cap: !expr paste0('Reported vs. true values for group "', ex_grp_label, '" at one transect in ', ex_yr, '.')
+#| tbl-cap: !expr paste0('Reported vs. true values for group "', ex_grp_label, '" at one transect in ', ex_yr, '.  Note the missed species in row 1 and the false positive in row 2.')
 
 evalgrp |>
   dplyr::filter(Site == '8') |>
@@ -231,13 +238,15 @@ $$
 w_s = \frac{1}{1 + \sigma_s}
 $$
 
-$\bar{d}_s$ is the mean absolute deviation for species $s$ and $\sigma_s$ is the standard deviation of the true values for that species across transects. It is important to note that $\sigma_s$ reflects the spatial variability of a species' true abundance across transects. It is a property of the site, not of the group's performance. A group can deviate substantially from a species whose true value is identical at every transect ($\sigma_s = 0$), because the two quantities are independent: $\sigma_s$ describes how consistent the correct answer is across space, while $|\bar{d}_s|$ describes how far the group was from that answer. The units of $\sigma_s$ differ by metric: for Abundance it is in ordinal category positions (the same scale as $|\bar{d}_s|$), while for Blade Length and Short Shoot Density it is in actual measurement units (cm and shoots per m², respectively). When $\sigma_s$ cannot be computed — for example, when a species is present at only one transect and the standard deviation is undefined — it is treated as 0, giving that species a weight of 1 (full weight in the scoring).
+$\bar{d}_s$ is the mean absolute deviation for species $s$ and $\sigma_s$ is the standard deviation of the true values for that species across transects. It is important to note that $\sigma_s$ reflects the spatial variability of a species' true abundance across transects. It is a property of the site, not of the group's performance. A group can deviate substantially from a species whose true value is identical at every transect ($\sigma_s = 0$), because the two quantities are independent: $\sigma_s$ describes how consistent the correct answer is across space, while $|\bar{d}_s|$ describes how far the group was from that answer. 
+
+The units of $\sigma_s$ differ by metric.  For Abundance it is in ordinal category positions (the same scale as $|\bar{d}_s|$), while for Blade Length and Short Shoot Density it is in actual measurement units (cm and shoots per m², respectively). When $\sigma_s$ cannot be computed, e.g., when a species is present at only one transect and the standard deviation is undefined, giving that species a weight of 1 (full weight in the scoring).
 
 Species where the true value varies a lot across transects (high $\sigma_s$) receive a lower weight $w_s$, so their deviations contribute less to $N$. Dividing by $D$ normalises the result so it stays on the scale of a typical deviation regardless of how many species are assessed.
 
 ```{r}
 #| label: tbl-sppdiff
-#| tbl-cap: !expr paste0("Per-species deviation summary of the abundance metric for group '", ex_grp_label, "' in ", ex_yr, ".")
+#| tbl-cap: !expr paste0("Per-species deviation summary of the abundance metric across sites for group '", ex_grp_label, "' in ", ex_yr, ".")
 
 sppdiff_fun(evalgrp, 'Abundance') |>
   dplyr::mutate(
@@ -281,17 +290,17 @@ D_abu <- round(sum(spd_abu$weight), 2)
 raw_abu <- round(N_abu / D_abu, 3)
 ```
 
-To see how these combine into a raw metric score, consider the Abundance values for group `r ex_grp_label` in `r ex_yr` from Table 4. Taking the absolute values of the mean deviations, the `r nrow(spd_abu)` species have $|\bar{d}_s|$ of `r paste(spd_abu$abs_dev, collapse = ', ')` and $\sigma_s$ of `r paste(spd_abu$sigma, collapse = ', ')` (as variation across all groups for each species). The weights $w_s = 1/(1+\sigma_s)$ are `r paste(spd_abu$weight, collapse = ', ')`, giving per-species contributions $w_s|\bar{d}_s|$ of `r paste(spd_abu$contrib, collapse = ', ')`. Summing across species:
+To see how these combine into a raw metric score, consider the Abundance values for group `r ex_grp_label` in from Table 4. Taking the absolute values of the mean deviations, the `r nrow(spd_abu)` species have $|\bar{d}_s|$ of `r paste(spd_abu$abs_dev, collapse = ', ')` and $\sigma_s$ of `r paste(spd_abu$sigma, collapse = ', ')` (as variation across all groups for each species, not shown in the table). The weights $w_s = 1/(1+\sigma_s)$ are `r paste(spd_abu$weight, collapse = ', ')`, giving per-species contributions $w_s|\bar{d}_s|$ of `r paste(spd_abu$contrib, collapse = ', ')`. Summing across species:
 
 $$N = `r paste(spd_abu$contrib, collapse = ' + ')` = `r N_abu`$$
 
 $$D = `r paste(spd_abu$weight, collapse = ' + ')` = `r D_abu`$$
 
-The raw Abundance score is $N/D = `r N_abu`/`r D_abu` = `r raw_abu`$, matching the Abundance value shown in Table 8.  This raw score is then scaled to a numeric score on a 0–100 scale, which is then converted to a letter grade (see next steps).
+The raw Abundance score is $N/D = `r N_abu`/`r D_abu` = `r raw_abu`$, matching the Abundance value shown in Table 8 (see a full worked example below).  This raw score is then scaled to a numeric score on a 0–100 scale using the range of scores across groups, which is then converted to a letter grade (see next steps).
 
 ### When weighting matters
 
-The weight $w_s$ does not guarantee a lower raw score than a simple unweighted mean. It produces a more appropriate one, not a systematically lower one. Whether the weighted N/D ends up lower or higher than the unweighted N/D depends on whether the high-$\sigma_s$ species carry above-average or below-average deviations. The two scenarios below use two hypothetical species to illustrate both cases.
+The weight $w_s$ produces a more appropriate score than a simple unweighted mean. Whether the weighted N/D ends up lower or higher than the unweighted N/D depends on whether the high-$\sigma_s$ species carry above-average or below-average deviations. The two scenarios below use two hypothetical species to illustrate both cases.
 
 ```{r}
 #| include: false
@@ -350,13 +359,13 @@ make_scenario_tbl <- function(spp, sigma, abs_dev){
 }
 ```
 
-**Scenario 1: weighting reduces the raw score**
+**Scenario 1: weighting reduces (improves) the raw score**
 
 A group deviates little from a consistent species ($\sigma = 0$) but substantially from a highly variable one ($\sigma = 3$). The weight discounts Species B's large deviation because natural variability in true values across transects makes precise agreement inherently harder.
 
 ```{r}
 #| label: tbl-scenario1
-#| tbl-cap: "Scenario 1: large deviation on the variable species. Weighted N/D (blue) is much lower than unweighted N/D (red), reflecting an appropriately reduced penalty for missing a naturally hard-to-pin-down species."
+#| tbl-cap: "Scenario 1 showing large group deviation on the variable species. Weighted N/D (blue) is much lower than unweighted N/D (red), reflecting an appropriately reduced penalty for missing a naturally hard-to-pin-down species."
 make_scenario_tbl(
   spp     = c('Species A (consistent, σ = 0)', 'Species B (variable, σ = 3)'),
   sigma   = c(0, 3),
@@ -366,13 +375,13 @@ make_scenario_tbl(
 
 Without weighting, Species B's deviation of 4.0 dominates the score (unweighted N/D = 2.25). With weighting, that deviation is reduced in influence because Species B is naturally variable, yielding a weighted N/D of 1.20, a substantially better score. The group missed a hard target, and the scoring system appropriately reduces the penalty for that miss.
 
-**Scenario 2: weighting raises the raw score**
+**Scenario 2: weighting raises (penalizes) the raw score**
 
 Now the same group deviates heavily from the consistent species but nearly matches the variable one. Because agreement on a consistent species carries more information, the weighted mean penalizes the miss more harshly than the unweighted mean would.
 
 ```{r}
 #| label: tbl-scenario2
-#| tbl-cap: "Scenario 2: large deviation on the consistent species. Weighted N/D (blue) is higher than unweighted N/D (red), appropriately penalising a large miss on the species where all groups should agree."
+#| tbl-cap: "Scenario 2 showing large deviation on the consistent species. Weighted N/D (blue) is higher than unweighted N/D (red), appropriately penalising a large miss on the species where all groups should agree."
 make_scenario_tbl(
   spp     = c('Species A (consistent, σ = 0)', 'Species B (variable, σ = 3)'),
   sigma   = c(0, 3),
@@ -382,7 +391,7 @@ make_scenario_tbl(
 
 Without weighting, Species B's near-zero deviation helps dilute the score (unweighted N/D = 1.75). With weighting, that good performance on a naturally variable species counts for less, yielding a weighted N/D of 2.50. This is the appropriate outcome since a large miss on a species where all groups should agree is a genuine measurement error and should not be offset by being close on a species that varies widely by nature.
 
-The weight $w_s = 1/(1+\sigma_s)$ ensures that consistent species where cross-group agreement is expected and meaningful drive the score more than naturally variable species where some disagreement is expected regardless. The weighted mean does not systematically produce better or worse scores than a simple average. Whether it is higher or lower depends on the data. What it always does is produce scores that more accurately reflect genuine measurement quality.
+The weight $w_s = 1/(1+\sigma_s)$ ensures that consistent species where cross-group agreement is expected drive the score more than naturally variable species where some disagreement is expected regardless. The weighted mean does not systematically produce better or worse scores than a simple average. Whether it is higher or lower depends on the data. What it always does is produce scores that more accurately reflect genuine measurement quality.
 
 ## Step 5: Score Calibration
 
@@ -392,15 +401,15 @@ To address this, the score floor (the minimum possible score) is raised in years
 
 ### How calibration works
 
-For each year and metric, we compute the within-year standard deviation of group deviations to assess the spread between groups. This is then expressed as a ratio to the historical mean spread across all training years. A ratio below 1 means groups agreed more closely than usual; a ratio above 1 means more disagreement than usual.
+For each year and metric, we compute the within-year standard deviation of group deviations to assess the spread between groups. This is then expressed as a ratio to the historical mean spread across all training years. A ratio below 1 means groups agreed more closely than usual and a ratio above 1 means more disagreement than usual.
 
 The score floor for a given year and metric is:
 
 $$
-\text{floor} = \max\!\left(50,\ 50 + \left(1 - \frac{\text{SD}_{\text{year}}}{\overline{\text{SD}}}\right) \times 25\right)
+\text{floor}_{\text{year}} = \max\!\left(50,\ 50 + \left(1 - \frac{\text{SD}_{\text{year}}}{\overline{\text{SD}}}\right) \times 50\right)
 $$
 
-where $\text{SD}_{\text{year}}$ is the within-year spread for that metric and year, $\overline{\text{SD}}$ is its historical mean, and 25 is a scaling constant that sets the maximum possible floor lift (grade-points). The scaling constant is a subjective choice: larger values compress scores toward each other in tight years, while smaller values preserve more spread. The maximum lift occurs when all groups agree perfectly (ratio = 0), giving a floor of $50 + 25 = 75$, which corresponds to a minimum grade of B-. A year at the historical average (ratio = 1) receives no adjustment and keeps a floor of 50. Loose years (ratio > 1) are capped at 50 so that no extra penalty is applied beyond the standard range.
+where $\text{SD}_{\text{year}}$ is the within-year spread for that metric and year, $\overline{\text{SD}}$ is its historical mean, and 50 is a scaling constant that sets the maximum possible floor lift (grade-points). The scaling constant is a subjective choice. Larger values compress scores toward each other in tight years, while smaller values preserve more spread. The maximum lift occurs when all groups agree perfectly (ratio = 0), giving a floor of $50 + 50 = 100$, which corresponds to a minimum grade of A (all groups performed exactly the same). A year at the historical average (ratio = 1) receives no adjustment and keeps a floor of 50. Loose years (ratio > 1) are capped at 50 so that no extra penalty is applied beyond the standard range.
 
 ```{r}
 #| label: fig-calibration
@@ -428,7 +437,7 @@ yr_spreads <- purrr::map(yrs, function(yr){
   dplyr::left_join(cal_lkp, by = 'metric') |>
   dplyr::mutate(
     ratio     = sd_avediff / mean_sd,
-    floor_adj = as.integer(pmax(50, 50 + (1 - ratio) * 25)),
+    floor_adj = as.integer(pmax(50, 50 + (1 - ratio) * 50)),
     metric    = factor(metric, levels = c('Abundance', 'Blade Length', 'Short Shoot Density'))
   )
 
@@ -466,7 +475,7 @@ yr_spreads |>
     columns = c(Abundance, `Blade Length`, `Short Shoot Density`),
     fn = scales::col_numeric(
       palette = c('#c6dbef', '#c7e9c0'),
-      domain = c(50, 75)
+      domain = c(50, 100)
     )
   ) |>
   gt::tab_style(
@@ -489,7 +498,7 @@ After calibration, each group's numeric score for each metric falls on a 0–100
 
 ```{r}
 #| label: tbl-grades
-#| tbl-cap: "Letter grade thresholds. Scores at or above the lower bound but below the upper bound receive the listed grade."
+#| tbl-cap: "Letter grade thresholds."
 
 tibble::tibble(
   Grade        = c('A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D+', 'D'),
@@ -521,7 +530,7 @@ ex_grpscr_raw <- allgrpscr_fun(trndat, ex_yr, truvar, cal = cal, raw = TRUE) |>
   dplyr::filter(grpact == ex_grp)
 ```
 
-The following walks through the full scoring pipeline for group `r ex_grp_label` in `r ex_yr`.
+The following walks through the full scoring workflow for group `r ex_grp_label` in `r ex_yr`.
 
 ### Raw deviations
 
@@ -556,11 +565,11 @@ purrr::map(c('Abundance', 'Blade Length', 'Short Shoot Density'), function(vr){
 
 ### Scores
 
-For each metric, the per-species rows show the mean absolute deviation ($|\bar{d}_s|$), the SD of true values across transects ($\sigma_s$), and each species' contribution to the weighted mean raw score ($|\bar{d}_s|/(1+\sigma_s)$). The "Raw score" row shows the weighted mean (computed using the formula in Step 4), the calibrated score floor, the rescaled numeric score, and the letter grade.
+For each metric, the per-species rows show the mean absolute deviation ($|\bar{d}_s|$), the SD of true values across sites ($\sigma_s$), and each species' contribution to the weighted mean raw score ($w_s$ and $|\bar{d}_s| x w_s$). The "Raw score" row shows the weighted mean (computed using the formula in Step 4), the calibrated score floor, the rescaled numeric score, and the letter grade.
 
 ```{r}
 #| label: tbl-example-scores
-#| tbl-cap: !expr paste0("Score derivation for group ", ex_grp_label, " in ", ex_yr, ". Per-species rows show the elements of the weighted mean formula from Step 4. The 'Raw score' row shows the weighted mean and its conversion to a calibrated numeric score via the score floor.")
+#| tbl-cap: !expr paste0("Score derivation for group ", ex_grp_label, " in ", ex_yr, ". Per-species rows show the elements of the weighted mean formula from Step 4. The 'Raw score' row shows the weighted mean and its conversion to a calibrated numeric score and letter grade via the score floor.")
 
 # Pre-rescaling weighted mean deviation per metric for this group
 ex_rawd <- allgrpscr_fun(trndat, ex_yr, truvar, raw_diff = TRUE) |>
@@ -695,7 +704,7 @@ The figure below shows how raw scores map to numeric scores across all groups fo
 
 ```{r}
 #| label: fig-rescale
-#| fig-cap: !expr paste0("Raw score to numeric score rescaling for all groups in ", ex_yr, " by metric. Each dot is one group; group ", ex_grp_label, " (blue) is highlighted with drop lines to both axes. The grey line is the linear mapping from the best group (lowest raw deviation, numeric score 100) to the worst (highest raw deviation, numeric score = score floor). The red dashed line shows the calibrated score floor.")
+#| fig-cap: !expr paste0("Raw score to numeric score rescaling for all groups in ", ex_yr, " by metric. Each dot is one group and group ", ex_grp_label, " (blue) is highlighted with drop lines to both axes. The grey line is the linear mapping from the best group (lowest raw deviation, numeric score 100) to the worst (highest raw deviation, numeric score = score floor). The red dashed line shows the calibrated score floor.")
 #| fig-height: 4
 #| fig-width: 9.5
 
