@@ -30,6 +30,19 @@ trndat <- trndat |>
   dplyr::filter(yr != 2026) |> 
   dplyr::bind_rows(all26)
 
+# zero out 2026 MCDNR blade length and short shoot at all transects except 2, 7, and 8
+trndat <- trndat |> 
+  dplyr::mutate(
+    aveval = dplyr::case_when(
+      yr == 2026 & MonitoringAgency == 'MCNRD' & !Site %in% c('2', '7', '8') & var %in% c('Blade Length', 'Short Shoot Density') ~ 0,
+      TRUE ~ aveval
+    ),
+    sdval = dplyr::case_when(
+      yr == 2026 & MonitoringAgency == 'MCNRD' & !Site %in% c('2', '7', '8') & var %in% c('Blade Length', 'Short Shoot Density') ~ 0,
+      TRUE ~ sdval
+    )
+  )
+
 save(trndat, file = here::here('data/trndat.rda'), compress = 'bzip2', version = 2)
 
 # create reports for the year -----------------------------------------------------------------
