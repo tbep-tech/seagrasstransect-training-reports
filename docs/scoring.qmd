@@ -415,7 +415,7 @@ where $\text{SD}_{\text{year}}$ is the within-year spread for that metric and ye
 #| label: fig-calibration
 #| fig-cap: "Within-year spread of group deviations for each metric and year. Bar colour shows the ratio of each year's spread to the historical mean (dashed line). Bar labels show the ratio and the resulting score floor. Blue (ratio < 1) years are tighter than average and receive a higher score floor."
 #| fig-height: 5
-#| fig-width: 9.5
+#| fig-width: 10
 
 yrs <- sort(unique(trndat$yr))
 
@@ -444,8 +444,8 @@ yr_spreads <- purrr::map(yrs, function(yr){
 ggplot(yr_spreads, aes(x = factor(yr), y = sd_avediff, fill = ratio)) +
   geom_col(width = 0.7, colour = 'grey40', linewidth = 0.3) +
   geom_hline(aes(yintercept = mean_sd), linetype = 'dashed', linewidth = 0.6) +
-  geom_text(aes(label = sprintf('ratio=%.2f\nfloor=%d', ratio, floor_adj)),
-            vjust = -0.25, size = 2.5, lineheight = 0.9) +
+  geom_text(aes(label = sprintf('ratio %.2f\nfloor %d', ratio, floor_adj)),
+            vjust = -0.25, size = 2.3, lineheight = 0.9) +
   scale_fill_gradient2(low = '#2166ac', mid = '#f7f7f7', high = '#d73027',
                        midpoint = 1, name = 'Ratio') +
   scale_y_continuous(expand = expansion(mult = c(0, 0.28))) +
