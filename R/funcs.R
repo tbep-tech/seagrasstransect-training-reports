@@ -333,9 +333,30 @@ evaltrntab_fun <- function(evalgrp){
 }
 
 #' Create summary of metrics across transects for each species
-#' 
+#'
 #' @param evalgrp Data frame of evaluation group
 #' @param vr Character vector of variable names
+#'
+#' @details \code{sdtruv} is the standard deviation of true values for the
+#'   species across transects, in the metric's native units. \code{cvtruv} is
+#'   the same spread expressed as a coefficient of variation
+#'   (\code{sdtruv / truval}), i.e. scale-free with respect to the species'
+#'   true magnitude; it is \code{NA} whenever \code{sdtruv} or \code{truval}
+#'   is \code{NA} or \code{truval} is zero. \code{avediff} is the mean
+#'   (absolute-unit) deviation and \code{aveperc} is the mean symmetric
+#'   percent difference; which pair (\code{avediff}/\code{sdtruv} or
+#'   \code{aveperc}/\code{cvtruv}) is used downstream depends on the
+#'   \code{metric} argument to \code{\link{allgrpscr_fun}}. For Blade Length
+#'   and Short Shoot Density, the deviation is computed per transect first
+#'   (reported minus true at that transect) and then averaged across
+#'   transects, rather than differencing the already-averaged \code{aveval}
+#'   and \code{truval}; a transect where only one side is known (a missed
+#'   report, or a species not on the consensus list there) is excluded from
+#'   the deviation rather than skewing \code{aveval} or \code{truval}
+#'   independently. Abundance already compares paired values at every
+#'   transect (missing sides are imputed as "no coverage" per Step 3), so
+#'   differencing its already-averaged \code{aveval}/\code{truval} is
+#'   equivalent
 sppdiff_fun <- function(evalgrp, vr = c('Abundance', 'Blade Length', 'Short Shoot Density')){
   
   vr <- match.arg(vr)
@@ -368,33 +389,52 @@ sppdiff_fun <- function(evalgrp, vr = c('Abundance', 'Blade Length', 'Short Shoo
       ) |>
       dplyr::mutate(
         avediff = aveval - truval,
-        aveperc = ifelse(truval == 0, NA, (aveval - truval) / ((aveval + truval) / 2))
+        aveperc = ifelse(truval == 0, NA, (aveval - truval) / ((aveval + truval) / 2)),
+        cvtruv  = ifelse(is.na(sdtruv) | is.na(truval) | truval == 0, NA, sdtruv / truval)
       )
-    
+
   } else {
 
-    out <- out |> 
+    out <- out |>
       dplyr::filter(
         sum(!is.na(truval)) > 0, # remove species where short shoot or blade length is not measured
         .by = Species
       ) |>
-      dplyr::select(Species, aveval, truval) |> 
+      dplyr::select(Species, aveval, truval) |>
       dplyr::mutate(across(-Species, as.numeric)) |>
-      dplyr::summarise(
-        aveval = ifelse(all(aveval == 0 | is.na(aveval)), NA, mean(aveval, na.rm = T)),
-        sdtruv = ifelse(all(truval == 0 | is.na(truval)), NA, sd(truval, na.rm = T)),
-        truval = ifelse(all(truval == 0 | is.na(truval)), NA, mean(truval, na.rm = T)), 
-        .by = 'Species'
-      ) |> 
       dplyr::mutate(
-        avediff = aveval - truval, 
-        aveperc = ifelse(truval == 0, NA, (aveval - truval) / ((aveval + truval) / 2))
+        # per-transect deviation, computed before averaging so a group's
+        # deviation only ever compares matched (aveval, truval) pairs at the
+        # same transect; a transect where only one side is known (a missed
+        # report, or a species not on the consensus list there) drops out of
+        # the deviation entirely rather than skewing aveval's or truval's mean
+        # independently
+        dif = ifelse(is.na(aveval) | is.na(truval), NA, aveval - truval),
+        pct = ifelse(is.na(aveval) | is.na(truval) | truval == 0, NA, (aveval - truval) / ((aveval + truval) / 2))
+      ) |>
+      dplyr::summarise(
+        aveval  = ifelse(all(aveval == 0 | is.na(aveval)), NA, mean(aveval, na.rm = T)),
+        sdtruv  = ifelse(all(truval == 0 | is.na(truval)), NA, sd(truval, na.rm = T)),
+        truval  = ifelse(all(truval == 0 | is.na(truval)), NA, mean(truval, na.rm = T)),
+        avediff = ifelse(all(is.na(dif)), NA, mean(dif, na.rm = T)),
+        aveperc = ifelse(all(is.na(pct)), NA, mean(pct, na.rm = T)),
+        .by = 'Species'
+      ) |>
+      dplyr::mutate(
+        cvtruv  = ifelse(is.na(sdtruv) | is.na(truval) | truval == 0, NA, sdtruv / truval)
       )
-    
+
   }
   
-  out <- out |> 
-    dplyr::mutate(dplyr::across(-Species, \(x) round(x, 1))) |> 
+  out <- out |>
+    dplyr::mutate(
+      dplyr::across(dplyr::any_of(c('aveval', 'sdtruv', 'truval', 'avediff')), \(x) round(x, 1)),
+      # aveperc/cvtruv are fractions (roughly -2 to 2), not native-unit
+      # measurements; rounding them to 1 decimal is a 10-percentage-point
+      # bucket, coarse enough to visibly disagree with a full-precision
+      # calculation of the same quantity, so they get finer rounding here
+      dplyr::across(dplyr::any_of(c('aveperc', 'cvtruv')), \(x) round(x, 3))
+    ) |>
     dplyr::arrange(Species)
 
   return(out)
@@ -552,22 +592,31 @@ card_fun <- function(evalgrp, grp, allgrpscr, vr = c('Abundance', 'Blade Length'
 
 #' Compute per-metric calibration constants from historical within-year spread
 #'
-#' For each year, computes the within-year SD of group weighted-mean absolute
+#' For each year, computes the within-year SD of group weighted-mean
 #' deviations per metric (how spread out groups were relative to each other).
 #' Returns the mean and SD of those yearly spreads so a focal year can be
 #' z-scored against history to adjust the grade floor.
 #'
 #' @param trndat data frame, training data
+#' @param metric named character vector giving the deviation basis to use per
+#'   score variable (or a single unnamed \code{'abs'}/\code{'pct'}, recycled to
+#'   all three). \code{'abs'} uses raw absolute deviations (original units,
+#'   e.g. cm or shoots/m2); \code{'pct'} uses the symmetric percent difference
+#'   instead so the spread doesn't scale with the magnitude of the true value
+#'   (see \code{\link{sppdiff_fun}}). Default keeps Abundance on its ordinal
+#'   absolute scale (already unitless and applied the same way to every
+#'   species) and scores Blade Length and Short Shoot Density on percent
+#'   difference (their natural scale varies by species and by the true mean)
 #'
 #' @return named list with element \code{mean_sd}, a named list of per-metric
 #'   historical mean within-year spreads
-calibrate_scr_fun <- function(trndat){
+calibrate_scr_fun <- function(trndat, metric = c(Abundance = 'abs', `Blade Length` = 'pct', `Short Shoot Density` = 'pct')){
 
   yrs <- unique(trndat$yr)
 
   yr_spreads <- purrr::map(yrs, function(yr){
     truvar <- truvar_fun(trndat, yr)
-    allgrpscr_fun(trndat, yr, truvar, raw_diff = TRUE) |>
+    allgrpscr_fun(trndat, yr, truvar, raw_diff = TRUE, metric = metric) |>
       dplyr::summarise(dplyr::across(Abundance:`Short Shoot Density`,
                                      ~ sd(.x, na.rm = TRUE))) |>
       dplyr::mutate(yr = yr)
@@ -589,33 +638,52 @@ calibrate_scr_fun <- function(trndat){
 #' @param yr integer, year
 #' @param truvar data frame "true" values from training data for a given year
 #' @param raw logical, return raw scores, otherwise letter grades
-#' @param raw_diff logical, return pre-rescale weighted-mean absolute deviations
+#' @param raw_diff logical, return pre-rescale weighted-mean deviations
 #' @param cal named list of per-metric calibration constants from \code{\link{calibrate_scr_fun}}
 #' @param k numeric, maximum floor lift in grade-points when all groups agree perfectly (default 50, giving a floor of 100)
-allgrpscr_fun <- function(trndat, yr, truvar, raw = F, raw_diff = FALSE, cal = NULL, k = 50){
+#' @param metric named character vector giving the deviation basis to use per
+#'   score variable (or a single unnamed \code{'abs'}/\code{'pct'}, recycled to
+#'   all three); see \code{\link{calibrate_scr_fun}} for the default and
+#'   rationale. Should match the \code{metric} used to build \code{cal}. Also
+#'   controls the per-species weight: \code{'abs'} weights by the raw-unit
+#'   spread of true values across transects (\code{sdtruv}); \code{'pct'}
+#'   weights by that spread's coefficient of variation (\code{cvtruv}), so the
+#'   weighting is scale-free in the same way the deviation is (see
+#'   \code{\link{sppdiff_fun}})
+allgrpscr_fun <- function(trndat, yr, truvar, raw = F, raw_diff = FALSE, cal = NULL, k = 50,
+                           metric = c(Abundance = 'abs', `Blade Length` = 'pct', `Short Shoot Density` = 'pct')){
 
-  scrs <- trndat |> 
-    dplyr::filter(yr == !!yr) |> 
-    dplyr::select(grpact) |> 
-    dplyr::distinct() |> 
-    dplyr::group_nest(grpact, .key = 'evalgrp') |> 
+  varnms <- c('Abundance', 'Blade Length', 'Short Shoot Density')
+  if(is.null(names(metric)))
+    metric <- stats::setNames(rep_len(metric, length(varnms)), varnms)
+  metric <- metric[varnms]
+  stopifnot("metric must be 'abs' or 'pct' for each of Abundance, Blade Length, Short Shoot Density" =
+              all(metric %in% c('abs', 'pct')))
+
+  scrs <- trndat |>
+    dplyr::filter(yr == !!yr) |>
+    dplyr::select(grpact) |>
+    dplyr::distinct() |>
+    dplyr::group_nest(grpact, .key = 'evalgrp') |>
     dplyr::mutate(
       evalgrp = purrr::map2(grpact, evalgrp, ~ evalgrp_fun(trndat, yr, .x, truvar))
-    ) |> 
-    tidyr::crossing(var = c('Abundance', 'Blade Length', 'Short Shoot Density')) |> 
+    ) |>
+    tidyr::crossing(var = varnms) |>
     dplyr::mutate(
       avediff = purrr::pmap(list(evalgrp, var), function(evalgrp, var){
-        sppdiff_fun(evalgrp, var) |> 
+        sppdiff_fun(evalgrp, var) |>
           dplyr::mutate(
-            sdtruv = ifelse(is.na(sdtruv), 0, sdtruv)
-          ) |> 
+            devval = if(metric[[var]] == 'pct') aveperc else avediff,
+            sprd   = if(metric[[var]] == 'pct') cvtruv  else sdtruv,
+            sprd   = ifelse(is.na(sprd), 0, sprd)
+          ) |>
           dplyr::summarise(
-            avediff = weighted.mean(abs(avediff), 1 / (1 + sdtruv), na.rm = T)
-          ) |> 
+            avediff = weighted.mean(abs(devval), 1 / (1 + sprd), na.rm = T)
+          ) |>
           dplyr::pull(avediff)
       })
-    ) |> 
-    dplyr::select(-evalgrp) |> 
+    ) |>
+    dplyr::select(-evalgrp) |>
     tidyr::unnest(avediff) |>
     tidyr::pivot_wider(names_from = var, values_from = avediff)
 
@@ -836,9 +904,15 @@ savspecies <- function(){
 #' @param trndat data frame, transect training data
 #' @param na.rm logical, remove groups with no affiliation from results
 #' @param usemon logical, return only groups that are within tbeptools::trnlns
-#' 
+#' @param metric named character vector (or a single unnamed \code{'abs'}/
+#'   \code{'pct'}) passed to \code{\link{calibrate_scr_fun}} and
+#'   \code{\link{allgrpscr_fun}} (ignored when \code{cal} is supplied
+#'   directly); see \code{\link{calibrate_scr_fun}} for the default and
+#'   rationale
+#'
 #' @details some years have mroe than one group participating, e.g., two SWFWMD groups, scores are averaged in these cases
-allyrscr_fun <- function(trndat, na.rm = T, usemon = TRUE, cal = NULL){
+allyrscr_fun <- function(trndat, na.rm = T, usemon = TRUE, cal = NULL,
+                          metric = c(Abundance = 'abs', `Blade Length` = 'pct', `Short Shoot Density` = 'pct')){
 
   data(file = 'trnlns', package = 'tbeptools')
 
@@ -846,23 +920,23 @@ allyrscr_fun <- function(trndat, na.rm = T, usemon = TRUE, cal = NULL){
   grdbrk <- c(101, 95, 90, 85, 80, 75, 70, 65, 60, 55, 0)
 
   if(is.null(cal))
-    cal <- calibrate_scr_fun(trndat)
+    cal <- calibrate_scr_fun(trndat, metric = metric)
 
   yrs <- unique(trndat$yr)
-  
-  out <- tibble::tibble(yr = yrs) |> 
-    dplyr::group_nest(yr) |> 
+
+  out <- tibble::tibble(yr = yrs) |>
+    dplyr::group_nest(yr) |>
     dplyr::mutate(
       data = purrr::map(yr, function(x){
-        
+
         truvar <- truvar_fun(trndat, x)
-        
-        out <- allgrpscr_fun(trndat, x, truvar, raw = T, cal = cal)
-        
+
+        out <- allgrpscr_fun(trndat, x, truvar, raw = T, cal = cal, metric = metric)
+
         return(out)
-        
+
       })
-    ) |> 
+    ) |>
     tidyr::unnest('data') |> 
     tidyr::pivot_longer(cols = c(Abundance:Total),
                  names_to = 'var',
