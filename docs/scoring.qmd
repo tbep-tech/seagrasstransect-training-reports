@@ -31,11 +31,14 @@ load(here('data/trndat.rda'))
 ex_yr  <- 2025
 ex_grps <- sort(unique(trndat$grpact[trndat$yr == ex_yr]))
 
+# difference basis per metric, abundance on its own scale, others as percent
+scr_metric <- c(Abundance = 'abs', `Blade Length` = 'pct', `Short Shoot Density` = 'pct')
+
 # pre-compute objects reused across sections
 truespp  <- truespp_fun(trndat, ex_yr)
 truvar   <- truvar_fun(trndat, ex_yr)
-cal      <- calibrate_scr_fun(trndat)
-allgrpscr <- allgrpscr_fun(trndat, ex_yr, truvar, cal = cal)
+cal      <- calibrate_scr_fun(trndat, metric = scr_metric)
+allgrpscr <- allgrpscr_fun(trndat, ex_yr, truvar, cal = cal, metric = scr_metric)
 
 # non sav species
 non <- '^AA|^DA|^DB|^DG|^DR|^CYAN'
@@ -81,9 +84,10 @@ Note that "transect" is used herein to describe the intercalibration sites durin
 The following steps below outline the key methods used to calculate group scores.  The main points are:
 
 * Species identified by at least two groups count towards the "true" species list.
-* Scores are based on consensus among groups.  Groups that deviate from the consensus (using deviation from the average) receive lower scores.
-* Scores consider variability across transects.  Deviations for a metric where variability is high across transects aren't weighed as heavily when calculating the score.  Likewise, deviations for metrics with lower variability are penalized more heavily. 
-* Overall scores are mapped to letter grades using a traditional scoring curve.  The group with the smallest deviations from the averages automatically gets the highest grade and the group with the largest deviations automatically get the lowest grade.  However, the floor of the spread can be raised in years when all groups perform similarly. 
+* Scores are based on consensus among groups.  Groups that deviate from the consensus (using the difference from the average) receive lower scores.
+* Differences are computed transect by transect.  A difference at a transect where groups had a lot of trouble agreeing with each other counts for less, since that reflects how hard the species was to measure at that specific site, not the group's own performance.
+* Those transect-level differences are then combined into one value per species.  A species where a group's own difference was inconsistent from transect to transect counts for more, since that inconsistency is a property of the group's performance rather than the site.
+* Overall scores are mapped to letter grades using a traditional scoring curve.  The group with the smallest differences from the averages automatically gets the highest grade and the group with the largest differences automatically get the lowest grade.  However, the floor of the spread can be raised in years when all groups perform similarly. How similarity is defined is based on comparing the spread of differences across years.
 
 ## Step 1: The Consensus Species List
 
@@ -165,17 +169,17 @@ truvar |>
   )
 ```
 
-## Step 3: Group Deviations and Species ID Penalties
+## Step 3: Group Differences and Species ID Penalties
 
 For each group, reported values are compared to the true values across all consensus species and transects. This comparison reveals two types of species identification errors:
 
-**Missed species**: a species is present but the group did not record it. The group's abundance for that species is treated as "no coverage" (BB value 0) when computing the deviation. The penalty scales with the true abundance of the missed species: missing a rare species is a small error, while missing a dominant one is a large error.
+**Missed species**: a species is present but the group did not record it. The group's abundance for that species is treated as "no coverage" (BB value 0) when computing the difference. The penalty scales with the true abundance of the missed species: missing a rare species is a small error, while missing a dominant one is a large error.
 
 **False positives**: the group recorded a species that is not on the consensus list (i.e., no other group confirmed it). The true abundance is treated as "no coverage" (BB value 0). The penalty scales with how high the group's reported abundance was for that species.
 
 These penalties only affect the abundance score. Blade Length and Short Shoot Density cannot be meaningfully penalised for species that were not found.
 
-For Abundance, deviations are computed as differences in ordinal category positions rather than in raw Braun-Blanquet numeric values. The eight BB categories are treated as equally spaced steps (1 = no coverage through 8 = 76–100%), so a deviation of 1 means the group was one category apart from the true value, regardless of the numeric gap between those categories on the BB scale.  This implicitly assumes that there is similar difficulty in distinguishing between lower abundances (e.g., solitary vs few) and higher abundances (e.g., 51-75% vs 76-100%).
+For Abundance, the difference is computed as a gap in ordinal category positions rather than in raw Braun-Blanquet numeric values. The eight BB categories are treated as equally spaced steps (1 = no coverage through 8 = 76–100%), so a difference of 1 means the group was one category apart from the true value, regardless of the numeric gap between those categories on the BB scale.  This implicitly assumes that there is similar difficulty in distinguishing between lower abundances (e.g., solitary vs few) and higher abundances (e.g., 51-75% vs 76-100%).
 
 ```{r}
 #| label: tbl-evalgrp
@@ -214,39 +218,76 @@ evalgrp |>
 
 ## Step 4: Metric Scores
 
-For each metric (abundance, blade length, short shoot density), deviations from the true value are summarised per species across transects, then combined into a single number per group per metric. The combination uses a weighted mean of absolute differences, where the weight for each species is the inverse of the standard deviation of the true values across transects:
+For each metric (abundance, blade length, short shoot density), a group's reported values are compared to the true values species by species and transect by transect, then rolled up step by step into a single score per group per metric. Two different kinds of variability come into play, at two different levels, and they pull in opposite directions:
+
+* At each **transect**, a difference is discounted when the different groups had a lot of trouble agreeing with each other there. That disagreement reflects how hard the species was to pin down at that specific site. It is not the evaluated group's own performance.
+* Across **transects**, a species' combined difference is amplified when the group's own difference for that species was inconsistent from one transect to the next. That inconsistency is a property of the group's performance, not the site.
+
+### Per-transect difference and weight
+
+At transect $t$, the difference for species $s$ is
 
 $$
-\text{metric score}_{\text{raw}} = \frac{N}{D}
+d_{s,t} = \text{reported} - \text{true}
 $$
 
-where $N$ is the weighted sum of absolute deviations across species:
+for Abundance (an ordinal category-position difference, see Step 3), or the symmetric percent difference
 
 $$
-N = \sum_s w_s\,|\bar{d}_s|
+d_{s,t} = \frac{\text{reported} - \text{true}}{(\text{reported}+\text{true})/2}
 $$
 
-and $D$ is the total weight across species:
+for Blade Length and Short Shoot Density (see *Absolute vs. percent difference* below). Its weight is
 
 $$
-D = \sum_s w_s
+w_{s,t} = \frac{1}{1+\sigma_{s,t}}
 $$
 
-For both $N$ and $D$, the $w_s$ component is the per-species weight:
+where $\sigma_{s,t}$ is the standard deviation of *all* groups' individually reported values at that transect for that species, not just the group being scored. It measures how much trouble groups had agreeing with each other right there. A transect where fewer than two groups reported a value has an undefined $\sigma_{s,t}$ and gets full weight ($w_{s,t}=1$). This is independent of how much the true value itself might vary from one transect to another. That spatial variability plays no role anywhere in scoring.
+
+### Rolling up to a species value
+
+The species-level difference is a true weighted average, across transects, of the per-transect differences:
 
 $$
-w_s = \frac{1}{1 + \sigma_s}
+\bar{d}_s = \frac{\sum_{t=1}^{T} w_{s,t}\,d_{s,t}}{\sum_{t=1}^{T} w_{s,t}}
 $$
 
-$\bar{d}_s$ is the mean absolute deviation for species $s$ and $\sigma_s$ is the standard deviation of the true values for that species across transects. It is important to note that $\sigma_s$ reflects the spatial variability of a species' true abundance across transects. It is a property of the site, not of the group's performance. A group can deviate substantially from a species whose true value is identical at every transect ($\sigma_s = 0$), because the two quantities are independent: $\sigma_s$ describes how consistent the correct answer is across space, while $|\bar{d}_s|$ describes how far the group was from that answer. 
+A transect's influence on $\bar{d}_s$ scales with its weight $w_{s,t}$, so a transect discounted for poor cross-group agreement is proportionally down-weighted relative to the other transects, rather than simply contributing a smaller value while every transect still counts equally toward the denominator.
 
-The units of $\sigma_s$ differ by metric.  For Abundance it is in ordinal category positions (the same scale as $|\bar{d}_s|$), while for Blade Length and Short Shoot Density it is in actual measurement units (cm and shoots per m², respectively). When $\sigma_s$ cannot be computed, e.g., when a species is present at only one transect and the standard deviation is undefined, giving that species a weight of 1 (full weight in the scoring).
+The spread of the raw, unweighted per-transect difference across transects,
 
-Species where the true value varies a lot across transects (high $\sigma_s$) receive a lower weight $w_s$, so their deviations contribute less to $N$. Dividing by $D$ normalises the result so it stays on the scale of a typical deviation regardless of how many species are assessed.
+$$
+\gamma_s = \text{SD}_t\!\left(d_{s,t}\right)
+$$
+
+captures something different from $\sigma_{s,t}$: how consistent *this group's own* difference for species $s$ was from one transect to the next, rather than how much groups disagreed with each other at any single transect. $\gamma_s$ is deliberately computed on $d_{s,t}$ rather than the weighted $w_{s,t}\,d_{s,t}$ used for $\bar{d}_s$ above. Using the weighted series would fold $\sigma_{s,t}$'s own transect-to-transect variation into $\gamma_s$, contaminating a measure that is meant to reflect only the group's own consistency with a separate, cross-group effect. A species with only one valid transect has an undefined $\gamma_s$.
+
+### Combining species into a metric score
+
+$$
+\text{metric score}_{\text{raw}} = \frac{N}{D}, \qquad N = \sum_s (1+\gamma_s)\,|\bar{d}_s|, \qquad D = \sum_s (1+\gamma_s)
+$$
+
+Unlike the transect-level weight, this one *amplifies* rather than discounts. A species the group was inconsistent on (large $\gamma_s$) counts for more, not less, because that inconsistency reflects the group's own performance rather than a site-level or cross-group effect outside its control. A species with an undefined $\gamma_s$ (only one valid transect) gets the baseline weight of 1, neither amplified nor discounted.
+
+### Absolute vs. percent difference
+
+$d_{s,t}$ is not defined the same way for every metric:
+
+- **Abundance** uses the raw difference in ordinal Braun-Blanquet category positions (as described in Step 3). These categories are already unitless and applied the same way to every species, so there is no reason to convert them to a percent basis.
+- **Blade Length** and **Short Shoot Density** instead use the symmetric percent difference, averaged across transects (after the per-transect weight, and again after species are combined). These two metrics are measured in physical units (cm, shoots/m²) where the typical magnitude varies a great deal by species (e.g., Halodule is characteristically much shorter and denser than Thalassia), and quadrat selection varies across the multi-year training record. A raw difference of a few shoots/m² means something very different for a sparse bed than a dense one, and years with higher or lower density across the selected quadrats would otherwise look artificially more or less consistent across groups even when relative agreement hadn't changed. The percent difference puts every species and every year on the same relative scale, so a training year is not judged as unusually "tight" or "loose" just because the selected locations were denser or sparser that year.
+
+Both weights, $\sigma_{s,t}$ and $\gamma_s$, follow the same abs/percent split as $d_{s,t}$:
+
+- **Abundance** uses $\sigma_{s,t}$ and $\gamma_s$ directly, in raw category-position units, as above.
+- **Blade Length** and **Short Shoot Density** instead use each spread's **coefficient of variation**. $\sigma_{s,t}$ is divided by the true value at that transect, and $\gamma_s$ is computed on the already-percent-basis $d_{s,t}$ series (the symmetric percent difference), which is already scale-free. A given absolute spread in shoots/m² means very different things for a sparse species and a dense one. Dividing by the true value at that transect puts the spread on the same relative footing as the percent difference it's weighting.
+
+When $\sigma_{s,t}$ or $\gamma_s$ cannot be computed (fewer than two groups reporting at a transect, or only one valid transect for a species), the corresponding weight defaults to its neutral value: full weight ($w_{s,t}=1$) for the transect-level discount, or baseline weight ($1+\gamma_s=1$) for the species-level amplification. Neither fallback disproportionately swings the score, since both weights operate on an already scale-free basis for Blade Length and Short Shoot Density.
 
 ```{r}
 #| label: tbl-sppdiff
-#| tbl-cap: !expr paste0("Per-species deviation summary of the abundance metric across sites for group '", ex_grp_label, "' in ", ex_yr, ".")
+#| tbl-cap: !expr paste0("Per-species difference summary of the abundance metric across sites for group '", ex_grp_label, "' in ", ex_yr, ".")
 
 sppdiff_fun(evalgrp, 'Abundance') |>
   dplyr::mutate(
@@ -254,11 +295,21 @@ sppdiff_fun(evalgrp, 'Abundance') |>
                      labels = c('no coverage','solitary','few','<5%','5-25%','25-50%','51-75%','76-100%')),
     truval  = factor(truval  - 1, levels = 0:7,
                      labels = c('no coverage','solitary','few','<5%','5-25%','25-50%','51-75%','76-100%')),
-    avediff = round(avediff, 2)
+    avediff = round(avediff, 2),
+    devsd   = round(devsd, 2),
+    weight  = round(1 + dplyr::coalesce(devsd, 0), 2),
+    contrib = round(abs(avediff) * weight, 2)
   ) |>
   dplyr::select(Species, `Reported (avg)` = aveval, `True (avg)` = truval,
-                `Mean deviation` = avediff) |>
+                `Mean difference` = avediff, `Difference SD` = devsd, weight, contrib) |>
   gt::gt() |>
+  gt::sub_missing(missing_text = '—') |>
+  gt::cols_label(
+    `Mean difference` = gt::html('Mean difference (d̅<sub>s</sub>)'),
+    `Difference SD`   = gt::html('Difference SD (γ<sub>s</sub>)'),
+    weight            = gt::html('D (w<sub>s</sub>)'),
+    contrib           = gt::html('N (|d̅<sub>s</sub>| × w<sub>s</sub>)')
+  ) |>
   gt::tab_style(
     style = gt::cell_text(style = 'italic'),
     locations = gt::cells_body(columns = Species)
@@ -275,14 +326,46 @@ sppdiff_fun(evalgrp, 'Abundance') |>
   )
 ```
 
+The Difference SD ($\gamma_s$) column in @tbl-sppdiff is the standard deviation of each species' own raw per-transect differences $d_{s,t}$ (reported minus true, in category positions), before the cross-group weight $w_{s,t}$ from Step 4 is applied. For group `r ex_grp_label` in `r ex_yr`, those per-transect differences were:
+
+```{r}
+#| output: asis
+abu_transect <- evalgrp |>
+  dplyr::filter(Species %in% savspecies()) |>
+  dplyr::transmute(
+    Species,
+    Transect = as.numeric(Site),
+    aveval = as.numeric(`Abundance aveval`),
+    truval = as.numeric(`Abundance truval`)
+  ) |>
+  dplyr::mutate(
+    aveval = dplyr::if_else(is.na(aveval) & !is.na(truval), 1, aveval),
+    truval = dplyr::if_else(!is.na(aveval) & is.na(truval), 1, truval),
+    dif = aveval - truval
+  ) |>
+  dplyr::filter(!is.na(dif)) |>
+  dplyr::arrange(Species, Transect)
+
+abu_lines <- abu_transect |>
+  dplyr::summarise(
+    vals  = paste(dif, collapse = ', '),
+    sdval = round(sd(dif), 2),
+    .by = Species
+  )
+
+cat(paste0('- **', abu_lines$Species, '**: ', abu_lines$vals, ' across transects (SD = ', abu_lines$sdval, ')\n'), sep = '')
+```
+
+These are Reported minus True at each transect, from the Abundance columns of @tbl-example-evalgrp further below. They are not the same as that table's Diff column, which is already discounted by the transect-level weight $w_{s,t}$. Their SD matches the Difference SD column in @tbl-sppdiff above.
+
 ```{r}
 #| include: false
 spd_abu <- sppdiff_fun(evalgrp, 'Abundance') |>
   dplyr::mutate(
-    sdtruv  = dplyr::coalesce(sdtruv, 0),
+    devsd   = dplyr::coalesce(devsd, 0),
     abs_dev = round(abs(avediff), 2),
-    sigma   = round(sdtruv, 2),
-    weight  = round(1 / (1 + sigma), 2),
+    gamma   = round(devsd, 2),
+    weight  = round(1 + gamma, 2),
     contrib = round(abs_dev * weight, 2)
   )
 N_abu <- round(sum(spd_abu$contrib), 2)
@@ -290,22 +373,22 @@ D_abu <- round(sum(spd_abu$weight), 2)
 raw_abu <- round(N_abu / D_abu, 3)
 ```
 
-To see how these combine into a raw metric score, consider the Abundance values for group `r ex_grp_label` in from Table 4. Taking the absolute values of the mean deviations, the `r nrow(spd_abu)` species have $|\bar{d}_s|$ of `r paste(spd_abu$abs_dev, collapse = ', ')` and $\sigma_s$ of `r paste(spd_abu$sigma, collapse = ', ')` (as variation across all groups for each species, not shown in the table). The weights $w_s = 1/(1+\sigma_s)$ are `r paste(spd_abu$weight, collapse = ', ')`, giving per-species contributions $w_s|\bar{d}_s|$ of `r paste(spd_abu$contrib, collapse = ', ')`. Summing across species:
+To see how these combine into a raw metric score, consider the Abundance values for group `r ex_grp_label` in @tbl-sppdiff above. Taking the absolute values of the mean differences, the `r nrow(spd_abu)` species have $|\bar{d}_s|$ of `r paste(spd_abu$abs_dev, collapse = ', ')` and $\gamma_s$ of `r paste(spd_abu$gamma, collapse = ', ')`. The weights $w_s = 1+\gamma_s$ are `r paste(spd_abu$weight, collapse = ', ')`, giving per-species contributions $w_s|\bar{d}_s|$ of `r paste(spd_abu$contrib, collapse = ', ')`. Summing across species:
 
 $$N = `r paste(spd_abu$contrib, collapse = ' + ')` = `r N_abu`$$
 
 $$D = `r paste(spd_abu$weight, collapse = ' + ')` = `r D_abu`$$
 
-The raw Abundance score is $N/D = `r N_abu`/`r D_abu` = `r raw_abu`$, matching the Abundance value shown in Table 8 (see a full worked example below).  This raw score is then scaled to a numeric score on a 0–100 scale using the range of scores across groups, which is then converted to a letter grade (see next steps).
+The raw Abundance score is $N/D = `r N_abu`/`r D_abu` = `r raw_abu`$, matching the Abundance value shown in the "Raw score" row of @tbl-example-scores in the full worked example below. This raw score is then scaled to a numeric score on a 0–100 scale using the range of scores across groups, which is then converted to a letter grade (see next steps).
 
 ### When weighting matters
 
-The weight $w_s$ produces a more appropriate score than a simple unweighted mean. Whether the weighted N/D ends up lower or higher than the unweighted N/D depends on whether the high-$\sigma_s$ species carry above-average or below-average deviations. The two scenarios below use two hypothetical species to illustrate both cases.
+The weight $w_s = 1+\gamma_s$ makes an inconsistent species count for more than a simple unweighted mean would. Whether that raises the combined score depends on whether the inconsistent species' own average difference is itself large or small. The two scenarios below use two hypothetical species to illustrate both cases.
 
 ```{r}
 #| include: false
-make_scenario_tbl <- function(spp, sigma, abs_dev){
-  weight    <- round(1 / (1 + sigma), 2)
+make_scenario_tbl <- function(spp, gamma, abs_dev){
+  weight    <- round(1 + gamma, 2)
   contrib_w <- round(abs_dev * weight, 3)
   N_w  <- round(sum(contrib_w), 3)
   D_w  <- round(sum(weight), 2)
@@ -314,12 +397,12 @@ make_scenario_tbl <- function(spp, sigma, abs_dev){
   D_uw  <- as.numeric(length(abs_dev))
   ND_uw <- round(N_uw / D_uw, 2)
   sp_rows <- tibble::tibble(
-    label = spp, sigma = sigma, abs_dev = abs_dev,
+    label = spp, gamma = gamma, abs_dev = abs_dev,
     weight = weight, contrib_w = contrib_w, contrib_uw = abs_dev
   )
   sm_rows <- tibble::tibble(
     label = c('N', 'D', 'N / D'),
-    sigma = NA_real_, abs_dev = NA_real_, weight = NA_real_,
+    gamma = NA_real_, abs_dev = NA_real_, weight = NA_real_,
     contrib_w  = c(N_w,  D_w,  ND_w),
     contrib_uw = c(N_uw, D_uw, ND_uw)
   )
@@ -327,7 +410,7 @@ make_scenario_tbl <- function(spp, sigma, abs_dev){
     gt::gt() |>
     gt::cols_label(
       label      = '',
-      sigma      = gt::html('σ<sub>s</sub>'),
+      gamma      = gt::html('γ<sub>s</sub>'),
       abs_dev    = gt::html('|d̅<sub>s</sub>|'),
       weight     = gt::html('w<sub>s</sub>'),
       contrib_w  = gt::html('<strong>Weighted</strong><br>w<sub>s</sub> × |d̅<sub>s</sub>|'),
@@ -359,39 +442,39 @@ make_scenario_tbl <- function(spp, sigma, abs_dev){
 }
 ```
 
-**Scenario 1: weighting reduces (improves) the raw score**
+**Scenario 1: an inconsistent species with a large average difference compounds the penalty**
 
-A group deviates little from a consistent species ($\sigma = 0$) but substantially from a highly variable one ($\sigma = 3$). The weight discounts Species B's large deviation because natural variability in true values across transects makes precise agreement inherently harder.
+A group is consistent for one species ($\gamma = 0$) with a small difference, but erratic across transects for another species ($\gamma = 3$) that also happens to carry a large average difference.
 
 ```{r}
 #| label: tbl-scenario1
-#| tbl-cap: "Scenario 1 showing large group deviation on the variable species. Weighted N/D (blue) is much lower than unweighted N/D (red), reflecting an appropriately reduced penalty for missing a naturally hard-to-pin-down species."
+#| tbl-cap: "Scenario 1: an erratic species with a large average difference. Weighted N/D (blue) is higher than unweighted N/D (red). Amplifying an already-large difference compounds the penalty."
 make_scenario_tbl(
-  spp     = c('Species A (consistent, σ = 0)', 'Species B (variable, σ = 3)'),
-  sigma   = c(0, 3),
-  abs_dev = c(0.5, 4.0)
+  spp     = c('Species A (consistent, γ = 0)', 'Species B (erratic, γ = 3)'),
+  gamma   = c(0, 3),
+  abs_dev = c(0.5, 2.0)
 )
 ```
 
-Without weighting, Species B's deviation of 4.0 dominates the score (unweighted N/D = 2.25). With weighting, that deviation is reduced in influence because Species B is naturally variable, yielding a weighted N/D of 1.20, a substantially better score. The group missed a hard target, and the scoring system appropriately reduces the penalty for that miss.
+Without weighting, the two species average to 1.25 (unweighted N/D). With weighting, Species B's already-large difference is amplified further, yielding a weighted N/D of 1.70, a worse (higher) score. Being inconsistent on a species the group is also missing by a wide margin is penalized twice over, once for the size of the miss and again for the inconsistency.
 
-**Scenario 2: weighting raises (penalizes) the raw score**
+**Scenario 2: an inconsistent species with a small average difference dilutes the combined score**
 
-Now the same group deviates heavily from the consistent species but nearly matches the variable one. Because agreement on a consistent species carries more information, the weighted mean penalizes the miss more harshly than the unweighted mean would.
+Now the erratic species happens to average out to a small difference (some transects over, some under, largely cancelling), while the consistent species carries a real, steady miss.
 
 ```{r}
 #| label: tbl-scenario2
-#| tbl-cap: "Scenario 2 showing large deviation on the consistent species. Weighted N/D (blue) is higher than unweighted N/D (red), appropriately penalising a large miss on the species where all groups should agree."
+#| tbl-cap: "Scenario 2: an erratic species whose errors cancel to a small average. Weighted N/D (blue) is lower than unweighted N/D (red). Amplifying a small difference dilutes the steady miss on the other species."
 make_scenario_tbl(
-  spp     = c('Species A (consistent, σ = 0)', 'Species B (variable, σ = 3)'),
-  sigma   = c(0, 3),
-  abs_dev = c(3.0, 0.5)
+  spp     = c('Species A (consistent, γ = 0)', 'Species B (erratic, γ = 3)'),
+  gamma   = c(0, 3),
+  abs_dev = c(1.5, 0.3)
 )
 ```
 
-Without weighting, Species B's near-zero deviation helps dilute the score (unweighted N/D = 1.75). With weighting, that good performance on a naturally variable species counts for less, yielding a weighted N/D of 2.50. This is the appropriate outcome since a large miss on a species where all groups should agree is a genuine measurement error and should not be offset by being close on a species that varies widely by nature.
+Without weighting, the two species average to 0.90 (unweighted N/D). With weighting, Species B's small average difference is still amplified in absolute terms, but because it started small, giving it more relative weight dilutes Species A's steady, larger miss instead, yielding a weighted N/D of 0.54, a better (lower) score. Being erratic on a species does not by itself guarantee a worse score. It only compounds the penalty when that species' own average difference is also large.
 
-The weight $w_s = 1/(1+\sigma_s)$ ensures that consistent species where cross-group agreement is expected drive the score more than naturally variable species where some disagreement is expected regardless. The weighted mean does not systematically produce better or worse scores than a simple average. Whether it is higher or lower depends on the data. What it always does is produce scores that more accurately reflect genuine measurement quality.
+The weight $w_s=1+\gamma_s$ does not systematically produce better or worse scores than a simple average. Whether it is higher or lower depends on whether the inconsistent species' own difference happens to be large or small. What it always does is give more say to species a group measured erratically across transects, and less relative say to species it measured consistently, regardless of whether that consistent measurement was accurate.
 
 ## Step 5: Score Calibration
 
@@ -401,7 +484,9 @@ To address this, the score floor (the minimum possible score) is raised in years
 
 ### How calibration works
 
-For each year and metric, we compute the within-year standard deviation of group deviations to assess the spread between groups. This is then expressed as a ratio to the historical mean spread across all training years. A ratio below 1 means groups agreed more closely than usual and a ratio above 1 means more disagreement than usual.
+For each year and metric, we compute the within-year standard deviation of group differences to assess the spread between groups, using the same difference basis as the metric's score (percent difference for Blade Length and Short Shoot Density, category-position difference for Abundance). This is then expressed as a ratio to the historical mean spread across all training years. A ratio below 1 means groups agreed more closely than usual and a ratio above 1 means more disagreement than usual.
+
+Scoring Blade Length and Short Shoot Density on percent difference matters here in particular.  Both are measured in physical units whose typical scale varies by species and quadrat locations over the multi-year training record. Computing this spread on raw units would confuse a change in that scale with a genuine change in how closely groups agree, making some years look artificially tighter or looser than they really were. Percent difference keeps the year-to-year comparison on a consistent, scale-free basis.
 
 The score floor for a given year and metric is:
 
@@ -413,7 +498,7 @@ where $\text{SD}_{\text{year}}$ is the within-year spread for that metric and ye
 
 ```{r}
 #| label: fig-calibration
-#| fig-cap: "Within-year spread of group deviations for each metric and year. Bar colour shows the ratio of each year's spread to the historical mean (dashed line). Bar labels show the ratio and the resulting score floor. Blue (ratio < 1) years are tighter than average and receive a higher score floor."
+#| fig-cap: "Within-year spread of group differences for each metric and year. Bar colour shows the ratio of each year's spread to the historical mean (dashed line). Bar labels show the ratio and the resulting score floor. Blue (ratio < 1) years are tighter than average and receive a higher score floor. Spread is in category-position units for Abundance and percent-difference units for Blade Length and Short Shoot Density, so bar heights are only comparable within a panel, not across panels."
 #| fig-height: 5
 #| fig-width: 10
 
@@ -427,7 +512,7 @@ cal_lkp <- tibble::tibble(
 
 yr_spreads <- purrr::map(yrs, function(yr){
   tv <- truvar_fun(trndat, yr)
-  allgrpscr_fun(trndat, yr, tv, raw_diff = TRUE) |>
+  allgrpscr_fun(trndat, yr, tv, raw_diff = TRUE, metric = scr_metric) |>
     dplyr::summarise(dplyr::across(Abundance:`Short Shoot Density`,
                                    ~ sd(.x, na.rm = TRUE))) |>
     dplyr::mutate(yr = yr)
@@ -450,7 +535,7 @@ ggplot(yr_spreads, aes(x = factor(yr), y = sd_avediff, fill = ratio)) +
                        midpoint = 1, name = 'Ratio') +
   scale_y_continuous(expand = expansion(mult = c(0, 0.28))) +
   facet_wrap(~ metric, scales = 'free_y', nrow = 1) +
-  labs(x = NULL, y = 'Within-year SD of group deviations') +
+  labs(x = NULL, y = 'Within-year SD of group differences\n(category positions for Abundance, % difference for Blade Length, Short Shoot Density)') +
   theme_bw(base_size = 10) +
   theme(legend.position = 'bottom',
         axis.text.x = element_text(angle = 45, hjust = 1),
@@ -523,56 +608,231 @@ The Total score is the unweighted average of the Abundance, Blade Length, and Sh
 ## Worked Example
 
 ```{r}
-ex_grpscr <- allgrpscr_fun(trndat, ex_yr, truvar, cal = cal) |>
+ex_grpscr <- allgrpscr_fun(trndat, ex_yr, truvar, cal = cal, metric = scr_metric) |>
   dplyr::filter(grpact == ex_grp)
 
-ex_grpscr_raw <- allgrpscr_fun(trndat, ex_yr, truvar, cal = cal, raw = TRUE) |>
+ex_grpscr_raw <- allgrpscr_fun(trndat, ex_yr, truvar, cal = cal, raw = TRUE, metric = scr_metric) |>
   dplyr::filter(grpact == ex_grp)
 ```
 
-The following walks through the full scoring workflow for group `r ex_grp_label` in `r ex_yr`.
+The following walks through the full scoring workflow for group `r ex_grp_label` in `r ex_yr`, step by step:
 
-### Raw deviations
+1. Identify the "true" (consensus) species at each transect.
+2. Calculate the "true" value for each metric at each transect, as the cross-group average.
+3. Calculate the cross-group variation in reported values for each species/transect/metric, for the transect-level weight.
+4. Calculate each group's difference (reported minus true) for each species/transect/metric.
+5. Calculate the SD of those raw differences, across transects, for each species/metric, this is the group's own transect-to-transect consistency.
+6. Apply the transect-level weight from step 3 to each transect's difference from step 4, discounting differences at transects where groups disagreed a lot.
+7. Combine the weighted per-transect differences from step 6 across transects into one difference value per species/metric, using a true weighted average (weighted by the same transect-level weight from step 3, not a plain average), so a transect with a larger weight counts for more.
+8. Roll up species into a raw metric score using a weighted average, where the weight (from step 5) amplifies a species the group was inconsistent on.
+9. Establish, across all years of training data, the typical (historical average) spread of raw metric scores between groups within a year, this is the baseline the next step compares each year against to judge whether that year was unusually tight or loose.
+10. Calibrate the score floor for that year and metric based on how tight or loose the cohort was that year relative to the typical spread from step 9, then rescale the raw score to a 0-100 numeric score.
+11. Get the overall Total score as the plain average of the three metrics' numeric scores.
+
+### Raw differences
+
+The table below shows the raw data behind everything that follows: each row is one transect (site) and seagrass species, with the group's reported value, the cross-group true value, and the difference between them for each metric (a percent difference for Blade Length and Short Shoot Density, a category-position difference for Abundance). The Diff column is already discounted by the transect-level weight $w_{s,t}$ from Step 4 (a transect where groups had more trouble agreeing with each other counts for less). The "Average" row for each species is a true weighted average of the transect-level values above it (the sum of Diff $\times$ $w_{s,t}$ divided by the sum of $w_{s,t}$), the same quantity used in scoring (Step 4), so it is **not** a plain average of the Diff column shown here, nor is it what you'd get by averaging the Reported and True columns down to a single number and then subtracting, which is why those two columns are left blank on the Average row. The illustration below works through both points, and the weight itself, for one species.
 
 ```{r}
-#| label: tbl-example-sppdiff
-#| tbl-cap: !expr paste0("Per-species deviations across all metrics for group ", ex_grp_label, " in ", ex_yr, ".")
+#| label: tbl-example-evalgrp
+#| tbl-cap: !expr paste0("Per-transect reported vs. true values and differences for group ", ex_grp_label, " in ", ex_yr, ", for the seagrass species used in scoring. Diff is already weighted by how much groups agreed with each other at that transect for that species and metric (Step 4). The Average row per species is a true weighted average of the Diff values (not a plain average), and is not derived from the Reported/True columns (left blank there).")
 
-purrr::map(c('Abundance', 'Blade Length', 'Short Shoot Density'), function(vr){
-  sppdiff_fun(evalgrp, vr) |>
-    dplyr::mutate(metric = vr, avediff = round(avediff, 2)) |>
-    dplyr::select(metric, Species, `Reported avg` = aveval, `True avg` = truval,
-                  `Mean deviation` = avediff)
+vars_ord <- c('Abundance', 'Blade Length', 'Short Shoot Density')
+
+base_dat <- evalgrp |>
+  dplyr::filter(Species %in% savspecies()) |>
+  dplyr::mutate(Transect = as.numeric(Site))
+
+mkcols <- function(vr){
+  rep_v <- as.numeric(base_dat[[paste(vr, 'aveval')]])
+  tru_v <- as.numeric(base_dat[[paste(vr, 'truval')]])
+  sdg_v <- as.numeric(base_dat[[paste(vr, 'sdgrp')]])
+  if(scr_metric[[vr]] == 'pct'){
+    diff_v <- ifelse(is.na(rep_v) | is.na(tru_v) | tru_v == 0, NA, (rep_v - tru_v) / ((rep_v + tru_v) / 2))
+    sprd_v <- ifelse(is.na(sdg_v) | is.na(tru_v) | tru_v == 0, NA, sdg_v / tru_v)
+  } else {
+    diff_v <- ifelse(is.na(rep_v) | is.na(tru_v), NA, rep_v - tru_v)
+    sprd_v <- sdg_v
+  }
+  wt_v     <- 1 / (1 + ifelse(is.na(sprd_v), 0, sprd_v))
+  wdiff_v  <- diff_v * wt_v
+  diff_fmt <- if(scr_metric[[vr]] == 'pct'){
+    ifelse(is.na(wdiff_v), '—', paste0(sprintf('%.0f', wdiff_v * 100), '%'))
+  } else {
+    ifelse(is.na(wdiff_v), '—', as.character(round(wdiff_v, 2)))
+  }
+  tibble::tibble(
+    rep = ifelse(is.na(rep_v), '—', as.character(rep_v)),
+    tru = ifelse(is.na(tru_v), '—', as.character(tru_v)),
+    dif = diff_fmt
+  )
+}
+
+metcols <- purrr::map(vars_ord, mkcols) |> purrr::set_names(vars_ord)
+
+pertrn <- tibble::tibble(Species = base_dat$Species, Transect = as.character(base_dat$Transect), sort_key = base_dat$Transect)
+for(vr in vars_ord){
+  pertrn[[paste(vr, 'reported')]] <- metcols[[vr]]$rep
+  pertrn[[paste(vr, 'true')]]     <- metcols[[vr]]$tru
+  pertrn[[paste(vr, 'diff')]]     <- metcols[[vr]]$dif
+}
+
+# species-level average row per metric, using the same sppdiff_fun values
+# (and the same paired-transect calculation) used to compute the actual score
+avgrows <- purrr::map(sort(unique(base_dat$Species)), function(sp){
+  row <- list(Species = sp, Transect = 'Average', sort_key = Inf)
+  for(vr in vars_ord){
+    sd <- sppdiff_fun(evalgrp, vr) |> dplyr::filter(Species == sp)
+    devval <- if(nrow(sd) == 0) NA else if(scr_metric[[vr]] == 'pct') sd$aveperc[1] else sd$avediff[1]
+    row[[paste(vr, 'reported')]] <- '—'
+    row[[paste(vr, 'true')]]     <- '—'
+    row[[paste(vr, 'diff')]] <- if(is.na(devval)){
+      '—'
+    } else if(scr_metric[[vr]] == 'pct'){
+      paste0(sprintf('%.0f', devval * 100), '%')
+    } else {
+      as.character(devval)
+    }
+  }
+  tibble::as_tibble(row)
 }) |>
-  dplyr::bind_rows() |>
-  gt::gt(groupname_col = 'metric') |>
-  gt::tab_style(
-    style = gt::cell_text(style = 'italic'),
-    locations = gt::cells_body(columns = Species)
+  dplyr::bind_rows()
+
+dplyr::bind_rows(pertrn, avgrows) |>
+  dplyr::arrange(Species, sort_key) |>
+  dplyr::select(-sort_key) |>
+  gt::gt(groupname_col = 'Species') |>
+  gt::tab_spanner(label = 'Abundance', columns = dplyr::starts_with('Abundance')) |>
+  gt::tab_spanner(label = 'Blade Length', columns = dplyr::starts_with('Blade Length')) |>
+  gt::tab_spanner(label = 'Short Shoot Density', columns = dplyr::starts_with('Short Shoot Density')) |>
+  gt::cols_label(
+    `Abundance reported` = 'Reported', `Abundance true` = 'True', `Abundance diff` = 'Diff',
+    `Blade Length reported` = 'Reported', `Blade Length true` = 'True', `Blade Length diff` = 'Diff',
+    `Short Shoot Density reported` = 'Reported', `Short Shoot Density true` = 'True', `Short Shoot Density diff` = 'Diff'
   ) |>
   gt::tab_style(
-    style = list(gt::cell_fill(color = '#004F7E'),
-                 gt::cell_text(color = 'white', weight = 'bold')),
+    style = list(gt::cell_fill(color = '#004F7E'), gt::cell_text(color = 'white', weight = 'bold')),
     locations = gt::cells_row_groups()
   ) |>
+  gt::tab_style(
+    style = list(gt::cell_fill(color = '#f0f0f0'), gt::cell_text(weight = 'bold')),
+    locations = gt::cells_body(rows = Transect == 'Average')
+  ) |>
   gt::cols_align('left') |>
+  gt::tab_style(
+    style = list(gt::cell_fill(color = '#2166ac'), gt::cell_text(color = 'white', weight = 'bold')),
+    locations = gt::cells_column_labels()
+  ) |>
+  gt::tab_style(
+    style = list(gt::cell_fill(color = '#2166ac'), gt::cell_text(color = 'white', weight = 'bold')),
+    locations = gt::cells_column_spanners()
+  ) |>
+  gt::tab_source_note(
+    source_note = gt::html('Diff is weighted by how much groups disagreed with each other at that transect for that species and metric (Step 4), so it is not simply Reported minus True. The Average row is a true weighted average of Diff (sum of Diff &times; weight, divided by the sum of weight), not a plain average. See the worked illustration further below for that weight applied to one species.')
+  ) |>
   gt::tab_options(
-    table.border.top.color = '#004F7E',
-    table.border.bottom.color = '#004F7E',
-    column_labels.border.bottom.color = '#004F7E'
+    table.border.top.color = '#2166ac',
+    table.border.bottom.color = '#2166ac',
+    column_labels.border.bottom.color = '#2166ac'
   )
 ```
 
+```{r}
+#| include: false
+
+# pick the metric/species combination for this group where the two ways of
+# computing a difference diverge the most, so the illustration below is
+# concrete rather than a coincidental wash
+illus_dat <- purrr::map(c('Blade Length', 'Short Shoot Density'), function(vr){
+  evalgrp |>
+    dplyr::filter(Species %in% savspecies()) |>
+    dplyr::transmute(
+      metric = vr,
+      Site,
+      Species,
+      aveval = as.numeric(.data[[paste(vr, 'aveval')]]),
+      truval = as.numeric(.data[[paste(vr, 'truval')]]),
+      sdgrp  = as.numeric(.data[[paste(vr, 'sdgrp')]])
+    )
+}) |>
+  dplyr::bind_rows() |>
+  dplyr::filter(!is.na(aveval), !is.na(truval)) |>
+  dplyr::mutate(
+    perdiff = aveval - truval,
+    perpct  = (aveval - truval) / ((aveval + truval) / 2),
+    cvgrp   = ifelse(is.na(sdgrp) | truval == 0, NA, sdgrp / truval),
+    wt      = 1 / (1 + ifelse(is.na(cvgrp), 0, cvgrp)),
+    wpct    = perpct * wt
+  )
+
+illus_summ <- illus_dat |>
+  dplyr::summarise(
+    n = dplyr::n(),
+    pct_of_avg   = ifelse(mean(truval) == 0, NA, (mean(aveval) - mean(truval)) / ((mean(aveval) + mean(truval)) / 2)),
+    avg_of_pct   = mean(perpct, na.rm = TRUE),
+    # true weighted average (sum(w*x)/sum(w)), matching how sppdiff_fun
+    # computes aveperc/avediff, not a plain mean of the already-weighted
+    # per-transect values
+    num_wt       = sum(perpct * wt, na.rm = TRUE),
+    sum_wt       = sum(wt[!is.na(perpct)], na.rm = TRUE),
+    wavg_of_pct  = num_wt / sum_wt,
+    .by = c(metric, Species)
+  ) |>
+  dplyr::filter(n >= 2) |>
+  dplyr::mutate(gap = abs(avg_of_pct - pct_of_avg)) |>
+  dplyr::arrange(dplyr::desc(gap))
+
+illus_metric <- illus_summ$metric[1]
+illus_spp    <- illus_summ$Species[1]
+
+illus_rows <- illus_dat |>
+  dplyr::filter(metric == illus_metric, Species == illus_spp) |>
+  dplyr::arrange(Site)
+```
+
+For example, group `r ex_grp_label`'s `r tolower(illus_metric)` for *`r illus_spp`* was reported at `r nrow(illus_rows)` transects in `r ex_yr`:
+
+```{r}
+#| label: tbl-example-pairing
+#| tbl-cap: !expr paste0("Per-transect reported vs. true ", tolower(illus_metric), " for *", illus_spp, "*, group ", ex_grp_label, ", ", ex_yr, ". The percent difference is computed separately at each transect, then discounted by that transect's cross-group weight, before averaging.")
+
+illus_rows |>
+  dplyr::transmute(
+    Transect = as.numeric(Site),
+    Reported = round(aveval, 1),
+    True     = round(truval, 1),
+    `Percent difference` = paste0(sprintf('%.0f', perpct * 100), '%'),
+    `Cross-group CV` = ifelse(is.na(cvgrp), '—', sprintf('%.2f', cvgrp)),
+    `Weight` = sprintf('%.2f', wt),
+    `Weighted % difference` = paste0(sprintf('%.0f', wpct * 100), '%')
+  ) |>
+  gt::gt() |>
+  gt::cols_align('left') |>
+  gt::tab_style(
+    style = list(gt::cell_fill(color = '#2166ac'), gt::cell_text(color = 'white', weight = 'bold')),
+    locations = gt::cells_column_labels()
+  ) |>
+  gt::tab_options(
+    table.border.top.color = '#2166ac',
+    table.border.bottom.color = '#2166ac',
+    column_labels.border.bottom.color = '#2166ac'
+  )
+```
+
+Averaging the raw "Percent difference" column above gives `r sprintf('%.0f', illus_summ$avg_of_pct[1] * 100)`%. Two further steps separate that number from what actually feeds into this species' score. First, computing a single percent difference from the averaged Reported and True columns instead (i.e. `(mean(Reported) - mean(True)) / ((mean(Reported) + mean(True)) / 2)`) gives `r sprintf('%.0f', illus_summ$pct_of_avg[1] * 100)`% instead. That is a different number, because it lets transects with a larger true value dominate the average instead of letting each transect count equally. Step 4 always computes the per-transect difference first, as shown here, never this way. Second, each transect's percent difference is weighted by the Weight column, based on how much trouble groups had agreeing with each other at that transect (its cross-group CV). That weight is applied as a true weighted average (Step 4), not a plain average of the "Weighted % difference" column: dividing the sum of that column (`r round(illus_summ$num_wt[1], 2)`) by the sum of the Weight column (`r round(illus_summ$sum_wt[1], 2)`) gives `r sprintf('%.0f', illus_summ$wavg_of_pct[1] * 100)`%, matching the Average row for *`r illus_spp`*'s `r tolower(illus_metric)` in Table 9 above and the value that actually feeds into this species' difference, before the further species-level weighting described in Step 4.
+
 ### Scores
 
-For each metric, the per-species rows show the mean absolute deviation ($|\bar{d}_s|$), the SD of true values across sites ($\sigma_s$), and each species' contribution to the weighted mean raw score ($w_s$ and $|\bar{d}_s| x w_s$). The "Raw score" row shows the weighted mean (computed using the formula in Step 4), the calibrated score floor, the rescaled numeric score, and the letter grade.
+For each metric, the per-species rows show the mean absolute difference ($|\bar{d}_s|$), how consistent the group's own difference was for that species across transects ($\gamma_s$, described in Step 4), and each species' contribution to the weighted mean raw score ($w_s = 1+\gamma_s$ and $|\bar{d}_s| \times w_s$). A larger $\gamma_s$ means the group was more erratic on that species from transect to transect, and increases its weight rather than reducing it. The "Raw score" row shows the weighted mean (computed using the formula in Step 4), the calibrated score floor, the rescaled numeric score, and the letter grade.
 
 ```{r}
 #| label: tbl-example-scores
-#| tbl-cap: !expr paste0("Score derivation for group ", ex_grp_label, " in ", ex_yr, ". Per-species rows show the elements of the weighted mean formula from Step 4. The 'Raw score' row shows the weighted mean and its conversion to a calibrated numeric score and letter grade via the score floor.")
+#| tbl-cap: !expr paste0("Score derivation for group ", ex_grp_label, " in ", ex_yr, ". Per-species rows show the elements of the weighted mean formula from Step 4. The 'Raw score' row shows the weighted mean and its conversion to a calibrated numeric score and letter grade via the score floor. |d̅s| is a percent difference (fraction) for Blade Length and Short Shoot Density, and a category-position difference for Abundance.")
 
-# Pre-rescaling weighted mean deviation per metric for this group
-ex_rawd <- allgrpscr_fun(trndat, ex_yr, truvar, raw_diff = TRUE) |>
+metrics_ord <- c('Abundance', 'Blade Length', 'Short Shoot Density')
+
+# Pre-rescaling weighted mean difference per metric for this group
+ex_rawd <- allgrpscr_fun(trndat, ex_yr, truvar, raw_diff = TRUE, metric = scr_metric) |>
   dplyr::filter(grpact == ex_grp)
 
 # Score floors for this year
@@ -581,21 +841,21 @@ ex_floors <- yr_spreads |>
   dplyr::select(metric, floor_adj) |>
   dplyr::mutate(metric = as.character(metric))
 
-metrics_ord <- c('Abundance', 'Blade Length', 'Short Shoot Density')
-
 # Per-species contribution rows
 spp_rows <- purrr::map(metrics_ord, function(vr){
   sppdiff_fun(evalgrp, vr) |>
     dplyr::mutate(
-      sdtruv  = dplyr::coalesce(sdtruv, 0),
-      abs_dev = round(abs(avediff), 2),
-      sigma   = round(sdtruv, 2),
-      weight  = round(1 / (1 + sigma), 3),
-      contrib = round(abs_dev / (1 + sigma), 3)
+      devval  = if(scr_metric[[vr]] == 'pct') aveperc else avediff,
+      sprd    = if(scr_metric[[vr]] == 'pct') devcv    else devsd,
+      sprd    = dplyr::coalesce(sprd, 0),
+      abs_dev = round(abs(devval), 2),
+      gamma   = round(sprd, 2),
+      weight  = round(1 + gamma, 3),
+      contrib = round(abs_dev * (1 + gamma), 3)
     ) |>
     dplyr::transmute(
       metric = vr, row_type = 'species', Species,
-      abs_dev, sigma, weight, contrib,
+      abs_dev, gamma, weight, contrib,
       raw_score = NA_real_, floor_adj = NA_integer_,
       numeric_score = NA_real_, grade = NA_character_
     )
@@ -611,7 +871,7 @@ sum_rows <- purrr::map(metrics_ord, function(vr){
     row_type      = 'summary',
     Species       = 'Raw score (weighted mean)',
     abs_dev       = NA_real_,
-    sigma         = NA_real_,
+    gamma         = NA_real_,
     weight        = round(sum(spp_vr$weight, na.rm = TRUE), 3),
     contrib       = round(sum(spp_vr$contrib, na.rm = TRUE), 3),
     raw_score     = round(ex_rawd[[vr]], 3),
@@ -628,7 +888,7 @@ total_row <- tibble::tibble(
   row_type      = 'total',
   Species       = 'Average of three metric scores',
   abs_dev       = NA_real_,
-  sigma         = NA_real_,
+  gamma         = NA_real_,
   weight        = NA_real_,
   contrib       = NA_real_,
   raw_score     = NA_real_,
@@ -654,8 +914,8 @@ score_tbl |>
   gt::cols_label(
     Species       = 'Species',
     abs_dev       = gt::html('|d̅<sub>s</sub>|'),
-    sigma         = gt::html('σ<sub>s</sub>'),
-    weight        = gt::html('w<sub>s</sub> = 1/(1+σ<sub>s</sub>)<br><em>(sums to D)</em>'),
+    gamma         = gt::html('γ<sub>s</sub>'),
+    weight        = gt::html('w<sub>s</sub> = 1+γ<sub>s</sub><br><em>(sums to D)</em>'),
     contrib       = gt::html('|d̅<sub>s</sub>| × w<sub>s</sub><br><em>(sums to N)</em>'),
     raw_score     = gt::html('Raw score<br><em>(N/D)</em>'),
     floor_adj     = 'Score floor',
@@ -663,7 +923,7 @@ score_tbl |>
     grade         = 'Letter grade'
   ) |>
   gt::sub_missing(missing_text = '—') |>
-  gt::fmt_number(columns = c(abs_dev, sigma, weight, contrib), decimals = 2) |>
+  gt::fmt_number(columns = c(abs_dev, gamma, weight, contrib), decimals = 2) |>
   gt::fmt_number(columns = raw_score, decimals = 3) |>
   gt::fmt_number(columns = numeric_score, decimals = 1) |>
   gt::tab_style(
@@ -689,9 +949,9 @@ score_tbl |>
     style = list(gt::cell_fill(color = '#2166ac'), gt::cell_text(color = 'white', weight = 'bold')),
     locations = gt::cells_column_labels()
   ) |>
-  gt::cols_align('center', columns = c(abs_dev, sigma, weight, contrib, raw_score, floor_adj, numeric_score, grade)) |>
+  gt::cols_align('center', columns = c(abs_dev, gamma, weight, contrib, raw_score, floor_adj, numeric_score, grade)) |>
   gt::tab_source_note(
-    source_note = gt::html('For the Raw score row: the w<sub>s</sub> column shows D = &Sigma;w<sub>s</sub> and the |d̅<sub>s</sub>| &times; w<sub>s</sub> column shows N = &Sigma;(|d̅<sub>s</sub>| &times; w<sub>s</sub>). Raw score = N/D.')
+    source_note = gt::html('For the Raw score row: the w<sub>s</sub> column shows D = &Sigma;w<sub>s</sub> and the |d̅<sub>s</sub>| &times; w<sub>s</sub> column shows N = &Sigma;(|d̅<sub>s</sub>| &times; w<sub>s</sub>). Raw score = N/D. γ<sub>s</sub> measures how consistent the difference was for that species across transects, for the group being scored: a standard deviation for Abundance and a coefficient of variation for Blade Length and Short Shoot Density, not how much the true value or the cross-group disagreement varies. A larger γ<sub>s</sub> raises w<sub>s</sub>, so a species the group was erratic on counts for more, not less.')
   ) |>
   gt::tab_options(
     table.border.top.color = '#2166ac',
@@ -704,14 +964,14 @@ The figure below shows how raw scores map to numeric scores across all groups fo
 
 ```{r}
 #| label: fig-rescale
-#| fig-cap: !expr paste0("Raw score to numeric score rescaling for all groups in ", ex_yr, " by metric. Each dot is one group and group ", ex_grp_label, " (blue) is highlighted with drop lines to both axes. The grey line is the linear mapping from the best group (lowest raw deviation, numeric score 100) to the worst (highest raw deviation, numeric score = score floor). The red dashed line shows the calibrated score floor.")
+#| fig-cap: !expr paste0("Raw score to numeric score rescaling for all groups in ", ex_yr, " by metric. Each dot is one group and group ", ex_grp_label, " (blue) is highlighted with drop lines to both axes. The grey line is the linear mapping from the best group (lowest raw difference, numeric score 100) to the worst (highest raw difference, numeric score = score floor). The red dashed line shows the calibrated score floor.")
 #| fig-height: 4
 #| fig-width: 9.5
 
-all_rawd_long <- allgrpscr_fun(trndat, ex_yr, truvar, raw_diff = TRUE) |>
+all_rawd_long <- allgrpscr_fun(trndat, ex_yr, truvar, raw_diff = TRUE, metric = scr_metric) |>
   tidyr::pivot_longer(-grpact, names_to = 'metric', values_to = 'raw_score')
 
-all_num_long <- allgrpscr_fun(trndat, ex_yr, truvar, cal = cal, raw = TRUE) |>
+all_num_long <- allgrpscr_fun(trndat, ex_yr, truvar, cal = cal, raw = TRUE, metric = scr_metric) |>
   dplyr::select(-Total) |>
   tidyr::pivot_longer(-grpact, names_to = 'metric', values_to = 'numeric_score')
 
@@ -775,7 +1035,7 @@ ggplot(plot_dat, aes(x = raw_score, y = numeric_score)) +
   scale_y_continuous(breaks = seq(50, 100, 10), expand = expansion(mult = c(0.1, 0.05))) +
   scale_x_continuous(expand = expansion(mult = c(0.05, 0.35))) +
   facet_wrap(~ metric, scales = 'free_x', nrow = 1) +
-  labs(x = 'Raw score (weighted mean deviation)', y = 'Numeric score') +
+  labs(x = 'Raw score (weighted mean difference, % difference for Blade Length, Short Shoot Density)', y = 'Numeric score') +
   theme_bw(base_size = 10) +
   theme(
     strip.background = element_rect(fill = '#004F7E'),
@@ -793,7 +1053,7 @@ yr_spreads_wide <- yr_spreads |>
   dplyr::filter(yr == ex_yr) |>
   dplyr::select(metric, ratio, floor_adj)
 
-ex_grpscr_nocal_raw <- allgrpscr_fun(trndat, ex_yr, truvar, raw = TRUE) |>
+ex_grpscr_nocal_raw <- allgrpscr_fun(trndat, ex_yr, truvar, raw = TRUE, metric = scr_metric) |>
   dplyr::filter(grpact == ex_grp) |>
   tidyr::pivot_longer(-grpact, names_to = 'metric', values_to = 'score_before') |>
   dplyr::select(-grpact)

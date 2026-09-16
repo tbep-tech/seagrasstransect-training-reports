@@ -191,25 +191,58 @@ truvar_fun <- function(trndat, yr){
 }
 
 #' Get group difference from "true"
-#' 
+#'
 #' @param datyr data frame, training data for selected year
 #' @param grp character, group name
 #' @param truvar data frame, true values
-#' 
+#'
+#' @details in addition to each metric's \verb{aveval}/\verb{truval} columns,
+#'   the returned data frame carries a \verb{<metric> sdgrp} column per
+#'   transect (Site) and species: the standard deviation, across all groups
+#'   that reported at that transect (not just \code{grp}), of their
+#'   individually reported values for that metric. For Abundance this is
+#'   computed on the ordinal Braun-Blanquet category position (matching the
+#'   scale \code{\link{sppdiff_fun}} computes deviations on), not the raw BB
+#'   value. This is a measure of how much groups disagreed with each other at
+#'   that specific transect, i.e. how hard that species/metric was to pin
+#'   down there, and is distinct from (and unrelated to) how much the "true"
+#'   value itself might vary from one transect to another. It is \code{NA}
+#'   when fewer than two groups reported a value at that transect.
+#'
 #' @return data frame of group data compard to "true" values
 evalgrp_fun <- function(trndat, yr, grp, truvar){
-  
+
   abulev <- c('0', '0.1', '0.5', '1', '2', '3', '4', '5')
   abulab <- c('no coverage', 'solitary', 'few', '<5%', '5-25%', '25-50%', '51-75%', '76-100%')
-  
-  datyrgrp <- trndat |> 
-    dplyr::filter(yr == !!yr) |> 
-    dplyr::filter(grpact == !!grp) |> 
+
+  datyrgrp <- trndat |>
+    dplyr::filter(yr == !!yr) |>
+    dplyr::filter(grpact == !!grp) |>
     dplyr::select(Site, Species, var, aveval)
 
-  out <- datyrgrp |> 
-    dplyr::full_join(truvar, by = c('Site', 'Species', 'var')) |> 
-    dplyr::filter(!(aveval == 0 & truval == 0)) |> 
+  # cross-group spread at each transect: how much did the different groups'
+  # own reports disagree with each other at that specific site, for this
+  # species/metric (restricted to the same Site/Species/var combos truvar
+  # covers). Computed once across all groups, same for every group evaluated.
+  sprdgrp <- trndat |>
+    dplyr::filter(yr == !!yr) |>
+    dplyr::semi_join(truvar, by = c('Site', 'Species', 'var')) |>
+    dplyr::mutate(
+      val = dplyr::if_else(
+        var == 'Abundance',
+        as.numeric(factor(as.character(aveval), levels = abulev)),
+        as.numeric(aveval)
+      )
+    ) |>
+    dplyr::summarise(
+      sdgrp = dplyr::if_else(sum(!is.na(val)) < 2, NA_real_, sd(val, na.rm = TRUE)),
+      .by = c(Site, Species, var)
+    ) |>
+    tidyr::pivot_wider(names_from = var, values_from = sdgrp, names_glue = '{var} sdgrp')
+
+  out <- datyrgrp |>
+    dplyr::full_join(truvar, by = c('Site', 'Species', 'var')) |>
+    dplyr::filter(!(aveval == 0 & truval == 0)) |>
     tidyr::pivot_longer(
       cols = c(aveval, truval),
       names_to = 'valtype',
@@ -223,9 +256,13 @@ evalgrp_fun <- function(trndat, yr, grp, truvar){
     dplyr::mutate(
       `Abundance aveval` = factor(`Abundance aveval`, levels = abulev, labels = abulab),
       `Abundance truval` = factor(`Abundance truval`, levels = abulev, labels = abulab)
-    ) |> 
-    dplyr::mutate_if(is.numeric, ~sprintf('%0.1f', .)) |> 
-    dplyr::mutate_if(is.character, ~ifelse(. == 'NA', NA_character_, .))
+    ) |>
+    dplyr::mutate_if(is.numeric, ~sprintf('%0.1f', .)) |>
+    dplyr::mutate_if(is.character, ~ifelse(. == 'NA', NA_character_, .)) |>
+    # joined after the aveval/truval formatting above (which rounds to 1
+    # decimal for display) so sdgrp keeps full precision for the weight
+    # calculation in sppdiff_fun
+    dplyr::left_join(sprdgrp, by = c('Site', 'Species'))
   
   return(out)
   
@@ -337,60 +374,110 @@ evaltrntab_fun <- function(evalgrp){
 #' @param evalgrp Data frame of evaluation group
 #' @param vr Character vector of variable names
 #'
-#' @details \code{sdtruv} is the standard deviation of true values for the
-#'   species across transects, in the metric's native units. \code{cvtruv} is
-#'   the same spread expressed as a coefficient of variation
-#'   (\code{sdtruv / truval}), i.e. scale-free with respect to the species'
-#'   true magnitude; it is \code{NA} whenever \code{sdtruv} or \code{truval}
-#'   is \code{NA} or \code{truval} is zero. \code{avediff} is the mean
-#'   (absolute-unit) deviation and \code{aveperc} is the mean symmetric
-#'   percent difference; which pair (\code{avediff}/\code{sdtruv} or
-#'   \code{aveperc}/\code{cvtruv}) is used downstream depends on the
-#'   \code{metric} argument to \code{\link{allgrpscr_fun}}. For Blade Length
-#'   and Short Shoot Density, the deviation is computed per transect first
-#'   (reported minus true at that transect) and then averaged across
-#'   transects, rather than differencing the already-averaged \code{aveval}
-#'   and \code{truval}; a transect where only one side is known (a missed
-#'   report, or a species not on the consensus list there) is excluded from
-#'   the deviation rather than skewing \code{aveval} or \code{truval}
-#'   independently. Abundance already compares paired values at every
-#'   transect (missing sides are imputed as "no coverage" per Step 3), so
-#'   differencing its already-averaged \code{aveval}/\code{truval} is
-#'   equivalent
+#' @details The deviation is computed, and weighted, at the transect level
+#'   before being rolled up to a single per-species number. At each transect:
+#'   the deviation is the reported minus true value (\code{dif}, in the
+#'   metric's native/ordinal units) or the symmetric percent difference
+#'   (\code{pct}); the weight is based on \code{sdgrp} (see
+#'   \code{\link{evalgrp_fun}}), the standard deviation of all groups'
+#'   individual reports at that transect, i.e. how much trouble groups had
+#'   agreeing with each other there, not how the true value varies from one
+#'   transect to another (that spatial variability is not used anywhere in
+#'   scoring). \code{dif} is weighted by \code{1 / (1 + sdgrp)} and \code{pct}
+#'   by \code{1 / (1 + sdgrp / truval)} (a coefficient of variation, so the
+#'   weight is scale-free for metrics scored on a percent basis); a transect
+#'   where fewer than two groups reported (so \code{sdgrp} is undefined) gets
+#'   full weight, same convention as an undefined weight anywhere else in
+#'   scoring. \code{avediff} and \code{aveperc} are a true weighted average
+#'   across transects, \code{sum(w * d) / sum(w)}, not \code{mean(w * d)}: a
+#'   transect's influence on the result scales with its weight, rather than
+#'   every transect counting equally toward a fixed denominator while only
+#'   its contributed value shrinks. This is the same reasoning that makes
+#'   \code{\link{allgrpscr_fun}}'s species-into-metric roll-up a weighted
+#'   mean too. \code{devsd}/\code{devcv} are the standard
+#'   deviation, across transects, of the raw (unweighted) \code{dif}/\code{pct}
+#'   series, deliberately not the \code{wt_abs}/\code{wt_pct}-weighted series
+#'   \code{avediff}/\code{aveperc} are averaged from: how inconsistent *this
+#'   group's own* deviation was from one transect to another for that species,
+#'   as opposed to \code{sdgrp}/\code{cvgrp} above, which measure disagreement
+#'   among groups. Using the weighted series here would fold that separate,
+#'   cross-group effect into what is meant to be a measure of the scored
+#'   group's own performance. \code{NA} when fewer than two transects have a
+#'   defined deviation for that species. This is the basis
+#'   \code{\link{allgrpscr_fun}} uses to weight species when rolling up to a
+#'   metric score: unlike the transect-level weight above, a species with a
+#'   large \code{devsd}/\code{devcv} (this group was inconsistent on it) is
+#'   given *more* weight, not less, since that inconsistency reflects the
+#'   group's own performance rather than an uncontrollable site factor.
+#'   \code{sdtruv}/\code{cvtruv} report the average of the per-transect
+#'   \code{sdgrp}/CV across transects, for reference only (not used in any
+#'   further calculation). A transect where only one side of
+#'   \code{aveval}/\code{truval} is known (a missed report, or a species not
+#'   on the consensus list there) is excluded from the deviation rather than
+#'   skewing \code{aveval} or \code{truval} independently. \code{aveval} and
+#'   \code{truval} in the returned data frame are for display only (rounded
+#'   to a whole category for Abundance) and are not the values \code{avediff}
+#'   is derived from.
 sppdiff_fun <- function(evalgrp, vr = c('Abundance', 'Blade Length', 'Short Shoot Density')){
-  
+
   vr <- match.arg(vr)
-  
-  out <- evalgrp |> 
+
+  out <- evalgrp |>
     dplyr::filter(Species %in% savspecies()) |>
     dplyr::rename(
       aveval = paste(vr, 'aveval'),
-      truval = paste(vr, 'truval')
-    ) 
-  
+      truval = paste(vr, 'truval'),
+      sdgrp  = paste(vr, 'sdgrp')
+    )
+
   if(vr == 'Abundance'){
 
-    out <- out |> 
+    out <- out |>
       dplyr::select(
-        Species, 
+        Species,
         aveval,
-        truval
-      ) |> 
+        truval,
+        sdgrp
+      ) |>
       dplyr::mutate(across(-Species, as.numeric)) |>
       dplyr::mutate(
         aveval = dplyr::if_else(is.na(aveval) & !is.na(truval), 1, aveval),
-        truval = dplyr::if_else(!is.na(aveval) & is.na(truval), 1, truval)
+        truval = dplyr::if_else(!is.na(aveval) & is.na(truval), 1, truval),
+        # per-transect deviation, computed before averaging (same rationale
+        # as the continuous branch below): the group's aveval and the
+        # consensus truval are both already resolved per transect (imputed
+        # to 'no coverage' on whichever side is missing), so the deviation
+        # is taken transect by transect and only rounded to a whole category
+        # afterward for the Reported/True display columns, not before.
+        # The weight is also transect-specific (cross-group agreement at
+        # that transect), applied here before averaging across transects.
+        dif    = aveval - truval,
+        pct    = ifelse(truval == 0, NA, (aveval - truval) / ((aveval + truval) / 2)),
+        cvgrp  = ifelse(is.na(sdgrp) | truval == 0, NA, sdgrp / truval),
+        wt_abs = 1 / (1 + dplyr::coalesce(sdgrp, 0)),
+        wt_pct = 1 / (1 + dplyr::coalesce(cvgrp, 0))
       ) |>
       dplyr::summarise(
-        aveval = round(mean(aveval, na.rm = T), 0),
-        sdtruv = round(sd(truval, na.rm = T), 0),
-        truval = round(mean(truval, na.rm = T), 0),
+        # true weighted average (sum(w*x)/sum(w)), not mean(w*x): a transect's
+        # relative influence on avediff/aveperc should scale with wt_abs/wt_pct,
+        # not just its contributed value while every transect still counts
+        # equally toward the denominator (T), the same reasoning that makes
+        # allgrpscr_fun's species-into-metric roll-up a weighted.mean too
+        avediff = weighted.mean(dif, wt_abs, na.rm = T),
+        aveperc = ifelse(all(is.na(pct)), NA, weighted.mean(pct, wt_pct, na.rm = T)),
+        # devsd/devcv are computed on the raw (unweighted) per-transect dif/pct,
+        # not the wt_abs/wt_pct-weighted series avediff/aveperc are averaged
+        # from: this is the group's own transect-to-transect consistency, and
+        # mixing in wt_abs/wt_pct here would fold in how much *other* groups
+        # agreed with each other at each transect, a separate effect already
+        # captured by wt_abs/wt_pct, not a property of this group's performance
+        devsd   = ifelse(sum(!is.na(dif)) < 2, NA, sd(dif, na.rm = T)),
+        devcv   = ifelse(sum(!is.na(pct)) < 2, NA, sd(pct, na.rm = T)),
+        sdtruv  = ifelse(all(is.na(sdgrp)), NA, mean(sdgrp, na.rm = T)),
+        cvtruv  = ifelse(all(is.na(cvgrp)), NA, mean(cvgrp, na.rm = T)),
+        aveval  = round(mean(aveval, na.rm = T), 0),
+        truval  = round(mean(truval, na.rm = T), 0),
         .by = 'Species'
-      ) |>
-      dplyr::mutate(
-        avediff = aveval - truval,
-        aveperc = ifelse(truval == 0, NA, (aveval - truval) / ((aveval + truval) / 2)),
-        cvtruv  = ifelse(is.na(sdtruv) | is.na(truval) | truval == 0, NA, sdtruv / truval)
       )
 
   } else {
@@ -400,7 +487,7 @@ sppdiff_fun <- function(evalgrp, vr = c('Abundance', 'Blade Length', 'Short Shoo
         sum(!is.na(truval)) > 0, # remove species where short shoot or blade length is not measured
         .by = Species
       ) |>
-      dplyr::select(Species, aveval, truval) |>
+      dplyr::select(Species, aveval, truval, sdgrp) |>
       dplyr::mutate(across(-Species, as.numeric)) |>
       dplyr::mutate(
         # per-transect deviation, computed before averaging so a group's
@@ -408,32 +495,39 @@ sppdiff_fun <- function(evalgrp, vr = c('Abundance', 'Blade Length', 'Short Shoo
         # same transect; a transect where only one side is known (a missed
         # report, or a species not on the consensus list there) drops out of
         # the deviation entirely rather than skewing aveval's or truval's mean
-        # independently
-        dif = ifelse(is.na(aveval) | is.na(truval), NA, aveval - truval),
-        pct = ifelse(is.na(aveval) | is.na(truval) | truval == 0, NA, (aveval - truval) / ((aveval + truval) / 2))
+        # independently. Weighted by the transect-specific cross-group spread
+        # (sdgrp/cvgrp) before averaging across transects, same as Abundance.
+        dif    = ifelse(is.na(aveval) | is.na(truval), NA, aveval - truval),
+        pct    = ifelse(is.na(aveval) | is.na(truval) | truval == 0, NA, (aveval - truval) / ((aveval + truval) / 2)),
+        cvgrp  = ifelse(is.na(sdgrp) | is.na(truval) | truval == 0, NA, sdgrp / truval),
+        wt_abs = 1 / (1 + dplyr::coalesce(sdgrp, 0)),
+        wt_pct = 1 / (1 + dplyr::coalesce(cvgrp, 0))
       ) |>
       dplyr::summarise(
         aveval  = ifelse(all(aveval == 0 | is.na(aveval)), NA, mean(aveval, na.rm = T)),
-        sdtruv  = ifelse(all(truval == 0 | is.na(truval)), NA, sd(truval, na.rm = T)),
         truval  = ifelse(all(truval == 0 | is.na(truval)), NA, mean(truval, na.rm = T)),
-        avediff = ifelse(all(is.na(dif)), NA, mean(dif, na.rm = T)),
-        aveperc = ifelse(all(is.na(pct)), NA, mean(pct, na.rm = T)),
+        # true weighted average, see the Abundance branch above for why
+        avediff = ifelse(all(is.na(dif)), NA, weighted.mean(dif, wt_abs, na.rm = T)),
+        aveperc = ifelse(all(is.na(pct)), NA, weighted.mean(pct, wt_pct, na.rm = T)),
+        # devsd/devcv use the raw (unweighted) dif/pct, see the Abundance
+        # branch above for why
+        devsd   = ifelse(sum(!is.na(dif)) < 2, NA, sd(dif, na.rm = T)),
+        devcv   = ifelse(sum(!is.na(pct)) < 2, NA, sd(pct, na.rm = T)),
+        sdtruv  = ifelse(all(is.na(sdgrp)), NA, mean(sdgrp, na.rm = T)),
+        cvtruv  = ifelse(all(is.na(cvgrp)), NA, mean(cvgrp, na.rm = T)),
         .by = 'Species'
-      ) |>
-      dplyr::mutate(
-        cvtruv  = ifelse(is.na(sdtruv) | is.na(truval) | truval == 0, NA, sdtruv / truval)
       )
 
   }
-  
+
   out <- out |>
     dplyr::mutate(
-      dplyr::across(dplyr::any_of(c('aveval', 'sdtruv', 'truval', 'avediff')), \(x) round(x, 1)),
-      # aveperc/cvtruv are fractions (roughly -2 to 2), not native-unit
+      dplyr::across(dplyr::any_of(c('aveval', 'sdtruv', 'truval', 'avediff', 'devsd')), \(x) round(x, 1)),
+      # aveperc/cvtruv/devcv are fractions (roughly -2 to 2), not native-unit
       # measurements; rounding them to 1 decimal is a 10-percentage-point
       # bucket, coarse enough to visibly disagree with a full-precision
       # calculation of the same quantity, so they get finer rounding here
-      dplyr::across(dplyr::any_of(c('aveperc', 'cvtruv')), \(x) round(x, 3))
+      dplyr::across(dplyr::any_of(c('aveperc', 'cvtruv', 'devcv')), \(x) round(x, 3))
     ) |>
     dplyr::arrange(Species)
 
@@ -644,12 +738,14 @@ calibrate_scr_fun <- function(trndat, metric = c(Abundance = 'abs', `Blade Lengt
 #' @param metric named character vector giving the deviation basis to use per
 #'   score variable (or a single unnamed \code{'abs'}/\code{'pct'}, recycled to
 #'   all three); see \code{\link{calibrate_scr_fun}} for the default and
-#'   rationale. Should match the \code{metric} used to build \code{cal}. Also
-#'   controls the per-species weight: \code{'abs'} weights by the raw-unit
-#'   spread of true values across transects (\code{sdtruv}); \code{'pct'}
-#'   weights by that spread's coefficient of variation (\code{cvtruv}), so the
-#'   weighting is scale-free in the same way the deviation is (see
-#'   \code{\link{sppdiff_fun}})
+#'   rationale. Should match the \code{metric} used to build \code{cal}.
+#'   Transect-level weighting already happened inside \code{\link{sppdiff_fun}}
+#'   when species values were computed; combining species into a metric score
+#'   here is a weighted mean of each species' (already transect-weighted)
+#'   absolute deviation, weighted by \code{1 + devsd} or \code{1 + devcv} (see
+#'   \code{\link{sppdiff_fun}}): a species this group was inconsistent on
+#'   across transects counts *more*, not less, since that inconsistency is
+#'   the group's own performance rather than a site or cross-group effect
 allgrpscr_fun <- function(trndat, yr, truvar, raw = F, raw_diff = FALSE, cal = NULL, k = 50,
                            metric = c(Abundance = 'abs', `Blade Length` = 'pct', `Short Shoot Density` = 'pct')){
 
@@ -674,11 +770,11 @@ allgrpscr_fun <- function(trndat, yr, truvar, raw = F, raw_diff = FALSE, cal = N
         sppdiff_fun(evalgrp, var) |>
           dplyr::mutate(
             devval = if(metric[[var]] == 'pct') aveperc else avediff,
-            sprd   = if(metric[[var]] == 'pct') cvtruv  else sdtruv,
-            sprd   = ifelse(is.na(sprd), 0, sprd)
+            sprd   = if(metric[[var]] == 'pct') devcv   else devsd,
+            wt     = 1 + dplyr::coalesce(sprd, 0)
           ) |>
           dplyr::summarise(
-            avediff = weighted.mean(abs(devval), 1 / (1 + sprd), na.rm = T)
+            avediff = weighted.mean(abs(devval), wt, na.rm = T)
           ) |>
           dplyr::pull(avediff)
       })
