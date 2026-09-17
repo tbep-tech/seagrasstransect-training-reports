@@ -268,24 +268,34 @@ evalgrp_fun <- function(trndat, yr, grp, truvar){
   
 }
 
-#' Create a summary gt table for all transects and species
-#' 
+#' Create a summary gt table for all species and transects
+#'
 #' @param evalgrp data frame, group evaluation data
+#'
+#' @details Rows are grouped by species (not transect), matching how the
+#'   metrics are actually aggregated for scoring (Step 4 combines a species'
+#'   values across transects, not a transect's values across species).
+#'   Species not on the consensus SAV list (\code{\link{savspecies}}, i.e.
+#'   macroalgae) are listed as a separate, visually muted block at the
+#'   bottom of the table: they are scored on Abundance (a missed or
+#'   falsely-reported species counts there regardless of species type,
+#'   Step 3), but not on Blade Length or Short Shoot Density, which are not
+#'   measured for macroalgae.
 evaltrntab_fun <- function(evalgrp){
-  
+
   rptcol <- '#004F7E'
   trucol <- '#958984'
-  
-  totab <- evalgrp |> 
-    dplyr::select(Site, Species = Species, abuaveval = `Abundance aveval`, 
-           abutruval = `Abundance truval`, blavenum = `Blade Length aveval`, 
+
+  totab <- evalgrp |>
+    dplyr::select(Site, Species = Species, abuaveval = `Abundance aveval`,
+           abutruval = `Abundance truval`, blavenum = `Blade Length aveval`,
            bltrunum = `Blade Length truval`,
-           ssavenum = `Short Shoot Density aveval`, 
+           ssavenum = `Short Shoot Density aveval`,
            sstrunum = `Short Shoot Density truval`
-    ) |> 
+    ) |>
     dplyr::mutate(
-      Site = as.numeric(Site), 
-      abuavenum = as.numeric(abuaveval) - 1, 
+      Site = as.numeric(Site),
+      abuavenum = as.numeric(abuaveval) - 1,
       abutrunum = as.numeric(abutruval) - 1,
       blavenum = as.numeric(blavenum),
       bltrunum = as.numeric(bltrunum),
@@ -294,47 +304,56 @@ evaltrntab_fun <- function(evalgrp){
       `Abundance truval` = paste0('(', abutruval, ')'),
       `Blade Length truval` = paste0('(', bltrunum, ')'),
       `Short Shoot Density truval` = paste0('(', sstrunum, ')')
-    ) |> 
+    ) |>
     tidyr::unite('Abundance reported (most common)', abuaveval, `Abundance truval`, sep = ' ', remove = FALSE) |>
     tidyr::unite('Blade Length reported (average)', blavenum, `Blade Length truval`, sep = ' ', remove = FALSE) |>
     tidyr::unite('Short Shoot Density reported (average)', ssavenum, `Short Shoot Density truval`, sep = ' ', remove = FALSE) |>
-    dplyr::select(-abuaveval, -abutruval, -`Abundance truval`, -`Blade Length truval`, -`Short Shoot Density truval`) |> 
-    dplyr::mutate_all(~ ifelse(. == 'NA (NA)', '', .)) |> 
+    dplyr::select(-abuaveval, -abutruval, -`Abundance truval`, -`Blade Length truval`, -`Short Shoot Density truval`) |>
+    dplyr::mutate_all(~ ifelse(. == 'NA (NA)', '', .)) |>
     dplyr::mutate_at(c('Abundance reported (most common)', 'Blade Length reported (average)', 'Short Shoot Density reported (average)'), ~ gsub('^NA', '-', .)) |>
     dplyr::mutate_at(c('Abundance reported (most common)', 'Blade Length reported (average)', 'Short Shoot Density reported (average)'), ~ gsub('\\(NA\\)', '(--)', .)) |>
     dplyr::mutate_at(c('abuavenum', 'abutrunum', 'blavenum', 'bltrunum', 'ssavenum', 'sstrunum'), ~ ifelse(is.na(.x), 0, .x)) |> # bullet won't plot if value is NA
-    dplyr::arrange(Site, Species) |> 
-    dplyr::mutate(Site = paste('Transect', Site)) |> 
-    dplyr::group_by(Site)
+    dplyr::mutate(is_sav = Species %in% savspecies()) |>
+    dplyr::arrange(dplyr::desc(is_sav), Species, Site) |>
+    dplyr::mutate(Transect = paste('Transect', Site)) |>
+    dplyr::select(-Site) |>
+    dplyr::group_by(Species)
+
+  nonsav_spp <- totab |>
+    dplyr::ungroup() |>
+    dplyr::filter(!is_sav) |>
+    dplyr::distinct(Species) |>
+    dplyr::pull(Species)
 
   abubultxt <- paste0('<span style="color:', rptcol, ';display:inline;"><b>Abundance reported</b></span> <span style="color:', trucol, ';display:inline;"><b>(most common)</b></span>')
-  
+
   blbultxt <- gsub('Abundance reported', 'Blade length reported cm', abubultxt)
 
   ssbultxt <- gsub('Abundance reported', 'Short shoot density reported per m <sup>2</sup>', abubultxt)
 
-  out <- gt::gt(totab) |> 
+  out <- gt::gt(totab) |>
     gtExtras::gt_plt_bullet(column = abutrunum, target = abuavenum,
                   palette = c(trucol, rptcol)) |>
-    gtExtras::gt_plt_bullet(column = bltrunum, target = blavenum, 
-                  palette = c(trucol, rptcol)) |> 
+    gtExtras::gt_plt_bullet(column = bltrunum, target = blavenum,
+                  palette = c(trucol, rptcol)) |>
     gtExtras::gt_plt_bullet(column = sstrunum, target = ssavenum,
                   palette = c(trucol, rptcol)) |>
     gt::cols_label(
+      Transect = '',
       `Abundance reported (most common)`= gt::html(abubultxt),
-      `Blade Length reported (average)` = gt::html(blbultxt), 
+      `Blade Length reported (average)` = gt::html(blbultxt),
       `Short Shoot Density reported (average)` = gt::html(ssbultxt),
       abutrunum = '',
       bltrunum = '',
       sstrunum = ''
-    ) |> 
+    ) |>
+    gt::cols_hide(columns = is_sav) |>
+    gt::cols_move_to_start(columns = Transect) |>
     gt::tab_style(
       style = gt::cell_text(style = "italic"),
-      locations = gt::cells_body(
-        columns = 'Species'
-      )
+      locations = gt::cells_row_groups()
     ) |>
-    gt::tab_options(row_group.as_column = TRUE) |> 
+    gt::tab_options(row_group.as_column = TRUE) |>
     gt::text_transform(
       locations = gt::cells_body(
         columns = c(`Abundance reported (most common)`, `Blade Length reported (average)`, `Short Shoot Density reported (average)`)
@@ -347,7 +366,7 @@ evaltrntab_fun <- function(evalgrp){
     gt::cols_move(
       columns = abutrunum,
       after = `Abundance reported (most common)`
-    ) |> 
+    ) |>
     gt::cols_move(
       columns = bltrunum,
       after = `Blade Length reported (average)`
@@ -355,18 +374,22 @@ evaltrntab_fun <- function(evalgrp){
     gt::cols_move(
       columns = sstrunum,
       after = `Short Shoot Density reported (average)`
-    ) |> 
-    gt::cols_align('left')# |> 
-    # gt::opt_interactive(
-    #   use_pagination = F, 
-    #   use_pagination_info = F,
-    #   use_sorting = F, 
-    #   use_filters = T,
-    #   pagination_type = 'simple'
-    # )
-  
+    ) |>
+    gt::cols_align('left')
+
+  if(length(nonsav_spp) > 0){
+    out <- out |>
+      gt::tab_style(
+        style = list(gt::cell_fill(color = '#f0f0f0'), gt::cell_text(color = '#767676', style = 'italic')),
+        locations = gt::cells_row_groups(groups = nonsav_spp)
+      ) |>
+      gt::tab_source_note(
+        source_note = 'Species shaded grey (non-SAV) are only scored on abundance.'
+      )
+  }
+
   return(out)
-  
+
 }
 
 #' Create summary of metrics across transects for each species
@@ -392,38 +415,44 @@ evaltrntab_fun <- function(evalgrp){
 #'   across transects, \code{sum(w * d) / sum(w)}, not \code{mean(w * d)}: a
 #'   transect's influence on the result scales with its weight, rather than
 #'   every transect counting equally toward a fixed denominator while only
-#'   its contributed value shrinks. This is the same reasoning that makes
-#'   \code{\link{allgrpscr_fun}}'s species-into-metric roll-up a weighted
-#'   mean too. \code{devsd}/\code{devcv} are the standard
-#'   deviation, across transects, of the raw (unweighted) \code{dif}/\code{pct}
-#'   series, deliberately not the \code{wt_abs}/\code{wt_pct}-weighted series
-#'   \code{avediff}/\code{aveperc} are averaged from: how inconsistent *this
-#'   group's own* deviation was from one transect to another for that species,
-#'   as opposed to \code{sdgrp}/\code{cvgrp} above, which measure disagreement
-#'   among groups. Using the weighted series here would fold that separate,
-#'   cross-group effect into what is meant to be a measure of the scored
-#'   group's own performance. \code{NA} when fewer than two transects have a
-#'   defined deviation for that species. This is the basis
-#'   \code{\link{allgrpscr_fun}} uses to weight species when rolling up to a
-#'   metric score: unlike the transect-level weight above, a species with a
-#'   large \code{devsd}/\code{devcv} (this group was inconsistent on it) is
-#'   given *more* weight, not less, since that inconsistency reflects the
-#'   group's own performance rather than an uncontrollable site factor.
-#'   \code{sdtruv}/\code{cvtruv} report the average of the per-transect
-#'   \code{sdgrp}/CV across transects, for reference only (not used in any
-#'   further calculation). A transect where only one side of
-#'   \code{aveval}/\code{truval} is known (a missed report, or a species not
-#'   on the consensus list there) is excluded from the deviation rather than
-#'   skewing \code{aveval} or \code{truval} independently. \code{aveval} and
-#'   \code{truval} in the returned data frame are for display only (rounded
-#'   to a whole category for Abundance) and are not the values \code{avediff}
-#'   is derived from.
+#'   its contributed value shrinks. \code{sdtruv}/\code{cvtruv} report the
+#'   average of the per-transect \code{sdgrp}/CV across transects, for
+#'   reference only (not used in any further calculation). There is
+#'   deliberately no measure here of how consistent a single species' own
+#'   deviation was across transects (an earlier \code{devsd}/\code{devcv}):
+#'   with typically only 2-4 transects per species per group, that estimate
+#'   was dominated by sample-size noise and by the true value's own spatial
+#'   pattern rather than by anything about the group's performance, and there
+#'   was no way to separate the two at that sample size. A transect where
+#'   only one side of \code{aveval}/\code{truval} is known (a missed report,
+#'   or a species not on the consensus list there) is excluded from the
+#'   deviation rather than skewing \code{aveval} or \code{truval}
+#'   independently. \code{aveval} and \code{truval} in the returned data
+#'   frame are for display only (rounded to a whole category for Abundance)
+#'   and are not the values \code{avediff} is derived from. Abundance is
+#'   scored for every consensus species, including macroalgae, since a
+#'   missed or falsely-reported species is itself a scoreable event (Step 3)
+#'   regardless of species type. A false positive (\code{truval} unresolved
+#'   because no other group corroborated the species there) contributes a
+#'   flat one-category \code{dif} of 1, not the reported category minus the
+#'   imputed true value: what category the group happened to report is not
+#'   evidence about whether the species was actually there, so it should not
+#'   scale the size of the penalty the way a genuine, both-sides-observed
+#'   disagreement does. A missed species (the group failed to report
+#'   something every other group agreed was there) is unaffected by this and
+#'   keeps the full reported-minus-true deviation, since the true category is
+#'   itself well established there. For Abundance, the returned data frame
+#'   also carries \code{any_fp}/\code{any_missed}, whether any of that
+#'   species' transects were a false positive or a missed report; these are
+#'   for display only (e.g. \code{\link{card_fun}}) and play no part in
+#'   scoring, which already reflects them through \code{dif}. Blade Length
+#'   and Short Shoot Density are restricted to \code{\link{savspecies}} (SAV
+#'   only), since those measurements are not taken for macroalgae.
 sppdiff_fun <- function(evalgrp, vr = c('Abundance', 'Blade Length', 'Short Shoot Density')){
 
   vr <- match.arg(vr)
 
   out <- evalgrp |>
-    dplyr::filter(Species %in% savspecies()) |>
     dplyr::rename(
       aveval = paste(vr, 'aveval'),
       truval = paste(vr, 'truval'),
@@ -441,8 +470,14 @@ sppdiff_fun <- function(evalgrp, vr = c('Abundance', 'Blade Length', 'Short Shoo
       ) |>
       dplyr::mutate(across(-Species, as.numeric)) |>
       dplyr::mutate(
-        aveval = dplyr::if_else(is.na(aveval) & !is.na(truval), 1, aveval),
-        truval = dplyr::if_else(!is.na(aveval) & is.na(truval), 1, truval),
+        # a false positive (species reported that no other group
+        # corroborated at that transect, so truval is unresolved) is
+        # flagged before either side is imputed, so its penalty can be
+        # fixed rather than scaled by what was reported
+        is_fp     = is.na(truval) & !is.na(aveval),
+        is_missed = is.na(aveval) & !is.na(truval),
+        aveval = dplyr::if_else(is_missed, 1, aveval),
+        truval = dplyr::if_else(is_fp, 1, truval),
         # per-transect deviation, computed before averaging (same rationale
         # as the continuous branch below): the group's aveval and the
         # consensus truval are both already resolved per transect (imputed
@@ -451,7 +486,12 @@ sppdiff_fun <- function(evalgrp, vr = c('Abundance', 'Blade Length', 'Short Shoo
         # afterward for the Reported/True display columns, not before.
         # The weight is also transect-specific (cross-group agreement at
         # that transect), applied here before averaging across transects.
-        dif    = aveval - truval,
+        # A false positive is scored as a flat one-category miss rather
+        # than reported minus imputed-true: the category the group happened
+        # to report has nothing to do with whether the species was really
+        # there, so it should not scale the penalty the way a genuine,
+        # both-sides-observed disagreement does.
+        dif    = dplyr::if_else(is_fp, 1, aveval - truval),
         pct    = ifelse(truval == 0, NA, (aveval - truval) / ((aveval + truval) / 2)),
         cvgrp  = ifelse(is.na(sdgrp) | truval == 0, NA, sdgrp / truval),
         wt_abs = 1 / (1 + dplyr::coalesce(sdgrp, 0)),
@@ -465,24 +505,22 @@ sppdiff_fun <- function(evalgrp, vr = c('Abundance', 'Blade Length', 'Short Shoo
         # allgrpscr_fun's species-into-metric roll-up a weighted.mean too
         avediff = weighted.mean(dif, wt_abs, na.rm = T),
         aveperc = ifelse(all(is.na(pct)), NA, weighted.mean(pct, wt_pct, na.rm = T)),
-        # devsd/devcv are computed on the raw (unweighted) per-transect dif/pct,
-        # not the wt_abs/wt_pct-weighted series avediff/aveperc are averaged
-        # from: this is the group's own transect-to-transect consistency, and
-        # mixing in wt_abs/wt_pct here would fold in how much *other* groups
-        # agreed with each other at each transect, a separate effect already
-        # captured by wt_abs/wt_pct, not a property of this group's performance
-        devsd   = ifelse(sum(!is.na(dif)) < 2, NA, sd(dif, na.rm = T)),
-        devcv   = ifelse(sum(!is.na(pct)) < 2, NA, sd(pct, na.rm = T)),
         sdtruv  = ifelse(all(is.na(sdgrp)), NA, mean(sdgrp, na.rm = T)),
         cvtruv  = ifelse(all(is.na(cvgrp)), NA, mean(cvgrp, na.rm = T)),
         aveval  = round(mean(aveval, na.rm = T), 0),
         truval  = round(mean(truval, na.rm = T), 0),
+        # species-level flags for whether any of its transects were a
+        # missed report or a false positive, for display purposes only
+        # (not used anywhere in scoring, which already reflects these via dif)
+        any_fp     = any(is_fp, na.rm = T),
+        any_missed = any(is_missed, na.rm = T),
         .by = 'Species'
       )
 
   } else {
 
     out <- out |>
+      dplyr::filter(Species %in% savspecies()) |> # not measured for macroalgae
       dplyr::filter(
         sum(!is.na(truval)) > 0, # remove species where short shoot or blade length is not measured
         .by = Species
@@ -509,10 +547,6 @@ sppdiff_fun <- function(evalgrp, vr = c('Abundance', 'Blade Length', 'Short Shoo
         # true weighted average, see the Abundance branch above for why
         avediff = ifelse(all(is.na(dif)), NA, weighted.mean(dif, wt_abs, na.rm = T)),
         aveperc = ifelse(all(is.na(pct)), NA, weighted.mean(pct, wt_pct, na.rm = T)),
-        # devsd/devcv use the raw (unweighted) dif/pct, see the Abundance
-        # branch above for why
-        devsd   = ifelse(sum(!is.na(dif)) < 2, NA, sd(dif, na.rm = T)),
-        devcv   = ifelse(sum(!is.na(pct)) < 2, NA, sd(pct, na.rm = T)),
         sdtruv  = ifelse(all(is.na(sdgrp)), NA, mean(sdgrp, na.rm = T)),
         cvtruv  = ifelse(all(is.na(cvgrp)), NA, mean(cvgrp, na.rm = T)),
         .by = 'Species'
@@ -522,12 +556,12 @@ sppdiff_fun <- function(evalgrp, vr = c('Abundance', 'Blade Length', 'Short Shoo
 
   out <- out |>
     dplyr::mutate(
-      dplyr::across(dplyr::any_of(c('aveval', 'sdtruv', 'truval', 'avediff', 'devsd')), \(x) round(x, 1)),
-      # aveperc/cvtruv/devcv are fractions (roughly -2 to 2), not native-unit
+      dplyr::across(dplyr::any_of(c('aveval', 'sdtruv', 'truval', 'avediff')), \(x) round(x, 1)),
+      # aveperc/cvtruv are fractions (roughly -2 to 2), not native-unit
       # measurements; rounding them to 1 decimal is a 10-percentage-point
       # bucket, coarse enough to visibly disagree with a full-precision
       # calculation of the same quantity, so they get finer rounding here
-      dplyr::across(dplyr::any_of(c('aveperc', 'cvtruv', 'devcv')), \(x) round(x, 3))
+      dplyr::across(dplyr::any_of(c('aveperc', 'cvtruv')), \(x) round(x, 3))
     ) |>
     dplyr::arrange(Species)
 
@@ -545,131 +579,220 @@ card_fun <- function(evalgrp, grp, allgrpscr, vr = c('Abundance', 'Blade Length'
   
   vr <- match.arg(vr)
   
-  vruni <- c('Abundance' = 'mean BB categories away', 
-             'Blade Length' = 'cm difference on average',
-             'Short Shoot Density' = 'shoots per m<sup>2</sup> difference on average')
+  # display units differ by metric: Abundance is scored on raw category
+  # positions, Blade Length/Short Shoot Density on percent difference (Step 4)
+  vruni <- c('Abundance' = 'mean BB categories away',
+             'Blade Length' = 'difference on average',
+             'Short Shoot Density' = 'difference on average')
   vruni <- vruni[[vr]]
-  
-  rptcol <- '#004F7E'
-  trucol <- '#958984'
-  
-  sppdiff <- sppdiff_fun(evalgrp, vr)
 
-  grpscr <- allgrpscr |> 
+  rptcol  <- '#004F7E'
+  trucol  <- '#958984'
+  fpcol   <- '#B2182B' # false positive (Abundance only)
+  misscol <- '#E08214' # missed species (Abundance only)
+
+  # SAV species listed first (matching the order groups are trained to
+  # prioritize), non-SAV (macroalgae) after, alphabetical within each group
+  # rather than the plain alphabetical order sppdiff_fun returns
+  sppdiff <- sppdiff_fun(evalgrp, vr) |>
+    dplyr::arrange(dplyr::desc(Species %in% savspecies()), Species)
+
+  # for Abundance, a false positive or missed species has a mechanically
+  # forced sign (always +1 for a false positive, always <= 0 for a missed
+  # species, Step 3): including them here would make "how consistent is the
+  # direction of error across species" reflect species-ID events instead of
+  # genuine reporting bias. This subset (not sppdiff itself) is what decides
+  # the overall direction (sgndff) and cross-species consistency (sgndffuni)
+  # below. Blade Length/Short Shoot Density have no such flags and are
+  # unaffected. Falls back to the full set if every species had an event.
+  sppdiff_genuine <- if(vr == 'Abundance'){
+    out <- sppdiff |> dplyr::filter(!any_fp, !any_missed, !is.na(.data[['avediff']]))
+    if(nrow(out) == 0) sppdiff else out
+  } else {
+    sppdiff
+  }
+
+  grpscr <- allgrpscr |>
     dplyr::filter(grpact == !!grp) |>
     dplyr::select(-grpact)
-  
+
   scr <- as.character(grpscr[[vr]])
-  
+
   hiscr <- scr %in% c('A-', 'B+', 'B')
-  
-  # overall diff
-  sgndff <- sppdiff |> 
+
+  # column actually used for scoring this metric (Step 4): category
+  # difference for Abundance, percent difference for the other two
+  devcol <- if(vr == 'Abundance') 'avediff' else 'aveperc'
+
+  # overall diff (genuine species only for Abundance, see sppdiff_genuine above)
+  sgndff <- sppdiff_genuine |>
     dplyr::summarise(
-      avediff = round(mean(avediff, na.rm = T), 1)
-    ) |> 
-    dplyr::pull() |> 
+      dispval = round(mean(.data[[devcol]], na.rm = T), 1)
+    ) |>
+    dplyr::pull() |>
     sign()
   sgndff <- ifelse(sgndff == 0, '', ifelse(sgndff == 1, '+', '-'))
 
   # spp summary text
-  spptxt <- sppdiff |> 
+  spptxt <- sppdiff |>
     dplyr::mutate(
-      sgndff = sign(avediff),
+      dispval = .data[[devcol]],
+      sgndff = sign(dispval),
       sgndff = dplyr::case_when(
         is.na(sgndff) ~ '',
         sgndff == 0 ~ '',
         sgndff == 1 ~ '+',
         sgndff == -1 ~ '' # already a negative prefix
       ),
-      avediff = ifelse(is.na(avediff), 'not recorded', as.character(avediff)), 
-      avediff = dplyr::case_when(
-        avediff == 'not recorded' ~ avediff,
-        T ~ paste(sgndff, avediff, ' ', vruni, ' across transects', sep = '')
-      ),
-      Species = paste0('<i><b>', Species, '</b></i>')
-    ) |> 
-    tidyr::unite('Species', Species, avediff, sep = ' ') |>
-    dplyr::mutate(
-      Species = paste0('<span>', Species, '</span>')
-    ) |> 
-    dplyr::pull(Species) |> 
-    paste0(collapse = '</p><p>')
-  spptxt < paste0('<p>', spptxt, '</p>')
-  
-  # barplot prep
-  sppdiff <- sppdiff |> 
-    dplyr::filter(!is.na(aveval)) |> 
-    dplyr::mutate(
-      Species = factor(Species), 
-      Savnum = as.numeric(Species)
+      dispval = if(vr == 'Abundance') as.character(dispval) else paste0(round(dispval * 100, 0), '%'),
+      dispval = ifelse(is.na(.data[[devcol]]), 'not recorded', dispval),
+      dispval = dplyr::case_when(
+        dispval == 'not recorded' ~ dispval,
+        T ~ paste(sgndff, dispval, ' ', vruni, ' across transects', sep = '')
+      )
     )
-  
-  # barplot y axis and hover text differs if abundance or not
-  ttl <- paste0('Average <span style="color:', rptcol, ';display:inline;"><b>reported</b></span> vs <span style="color:', trucol, ';display:inline;"><b>true</b></span>')
-  yxs <- list(title = ttl )
-  hovtxttr <- paste0('True, ', sppdiff$truval)
-  hovtxtrp <- paste0('Reported, ', sppdiff$aveval)
+
+  # for Abundance, a false positive or missed species swaps in a short
+  # explanation instead of the generic category-difference text: the
+  # numeric difference alone (a flat 1 for a false positive, Step 3) does
+  # not say why, and is not informative on its own
   if(vr == 'Abundance'){
-    abulv <- 1:8
-    abulb <- c('no coverage', 'solitary', 'few', '<5%', '5-25%', '26-50%', '51-75%', '76-100%')
-    yxs <- list(title = ttl, tickvals = abulv, ticktext = abulb)
-    hovtxttr <- paste0('True, ', factor(sppdiff$truval, levels = abulv, labels = abulb))
-    hovtxtrp <- paste0('Reported, ', factor(sppdiff$aveval, levels = abulv, labels = abulb))
+    abulab <- c('no coverage', 'solitary', 'few', '<5%', '5-25%', '25-50%', '51-75%', '76-100%')
+    spptxt <- spptxt |>
+      dplyr::mutate(
+        dispval = dplyr::case_when(
+          any_fp ~ 'recorded but not confirmed by any other group',
+          any_missed ~ paste0('missed, true cover was ', abulab[truval]),
+          T ~ dispval
+        )
+      )
   }
 
-  # bar plot
+  spptxt <- spptxt |>
+    dplyr::mutate(
+      Species = paste0('<i><b>', Species, '</b></i>')
+    ) |>
+    tidyr::unite('Species', Species, dispval, sep = ' ') |>
+    dplyr::mutate(
+      Species = paste0('<span>', Species, '</span>')
+    ) |>
+    dplyr::pull(Species) |>
+    paste0(collapse = '</p><p>')
+  spptxt <- paste0('<p>', spptxt, '</p>')
+  # bslib's value-box-area is a flex column (title, value, then this content)
+  # centered as a block by default, leaving blank space above and below on a
+  # short species list. flex: 1 1 auto lets this div claim that leftover
+  # space instead (min-height: 0 lets it actually shrink below its content
+  # size, the usual flexbox gotcha, without that overflow-y wouldn't engage).
+  # flex-grow alone has nothing to overflow against, though: without an
+  # upper bound the div just grows to fit all its content and the scrollbar
+  # never appears, so max-height puts a ceiling back on it. Below that
+  # ceiling it still grows to fill the card's leftover space; at or above
+  # it, it scrolls instead of pushing past the card.
+  spptxt <- paste0('<div style="flex: 1 1 auto; min-height: 0; max-height: 200px; overflow-y: auto;">', spptxt, '</div>')
+
+  # barplot prep: species-level difference from true (bar{d}_s), centered at
+  # zero, on the same basis Step 4 actually scores on (category difference
+  # for Abundance, percent difference for Blade Length/Short Shoot Density).
+  # No error bar here: an earlier version showed a per-species consistency
+  # estimate (gamma_s), but that was dropped from scoring entirely (see
+  # sppdiff_fun) since with typically only 2-4 transects per species it was
+  # mostly sample-size noise, so there is nothing reliable left to plot.
+  sppdiff <- sppdiff |>
+    dplyr::filter(!is.na(.data[[devcol]]))
+
+  # a false positive's bar is always the same flat 1-category difference
+  # (Step 3), so it adds visual clutter without adding information the plot
+  # is meant to convey; it's still covered in the text narrative to the
+  # right. Missed species are left in the plot, their bar height still
+  # reflects the true abundance that was missed (Step 3).
+  if(vr == 'Abundance'){
+    sppdiff <- sppdiff |> dplyr::filter(!any_fp)
+  }
+
+  sppdiff <- sppdiff |>
+    dplyr::mutate(
+      # preserve the SAV-first row order set above as the factor's level
+      # order, rather than factor()'s default alphabetical re-sort
+      Species = factor(Species, levels = unique(Species)),
+      Savnum = as.numeric(Species),
+      plotval = if(vr == 'Abundance') avediff else aveperc * 100,
+      # bar color flags a false positive or missed species (Abundance only,
+      # see Step 3): the bar height alone doesn't distinguish a genuine
+      # disagreement from a species-ID error
+      barcol = if(vr == 'Abundance'){
+        dplyr::case_when(
+          any_fp ~ fpcol,
+          any_missed ~ misscol,
+          T ~ rptcol
+        )
+      } else rptcol
+    )
+
+  # symmetric range so the zero line sits in the middle of the plot
+  rngmax <- max(abs(sppdiff$plotval), na.rm = T)
+  rngmax <- if(!is.finite(rngmax) || rngmax == 0) 1 else rngmax * 1.1
+  yrng <- c(-rngmax, rngmax)
+
+  # y-axis units and hover text differ by metric: category difference for
+  # Abundance, percent difference for Blade Length/Short Shoot Density
+  if(vr == 'Abundance'){
+    yxs <- list(title = 'Avg. diff. from true<br>(+/- categories)', range = yrng, zeroline = TRUE, zerolinewidth = 2, zerolinecolor = '#444444')
+    hovtxt <- paste0(
+      sppdiff$Species, ': ', ifelse(sppdiff$plotval > 0, '+', ''), sppdiff$plotval, ' categories',
+      dplyr::case_when(
+        sppdiff$any_fp ~ ' (false positive)',
+        sppdiff$any_missed ~ ' (missed species)',
+        T ~ ''
+      )
+    )
+  } else {
+    yxs <- list(title = 'Avg. diff. from true (%)', range = yrng, zeroline = TRUE, zerolinewidth = 2, zerolinecolor = '#444444')
+    hovtxt <- paste0(sppdiff$Species, ': ', ifelse(sppdiff$plotval > 0, '+', ''), round(sppdiff$plotval, 0), '%')
+  }
+
+  # bar plot: one bar per species, centered at zero
   p <- plotly::plot_ly(
       sppdiff,
       x = ~ Savnum,
-      y = ~ truval,
+      y = ~ plotval,
       type = 'bar',
-      marker = list(color = trucol), 
-      name = 'True value',
-      text = hovtxttr,
+      marker = list(color = ~ barcol),
+      text = hovtxt,
       hoverinfo = 'text',
-      textposition = 'none', 
-      error_y = ~list(array = sdtruv,
-                      color = 'grey', width = 0)
-    ) |> 
-    plotly::add_segments(
-      data = sppdiff,
-      x = ~ Savnum - 0.4,
-      xend = ~ Savnum + 0.4,
-      y = ~ aveval,
-      yend = ~ aveval,
-      line = list(color = rptcol, width = 7), 
-      name = 'Reported value',
-      text = hovtxtrp,
-      hoverinfo = 'text',
-      textposition = 'none',
-      inherit = F
+      textposition = 'none'
     ) |>
-    plotly::config(displayModeBar = F) |> 
+    plotly::config(displayModeBar = F) |>
     plotly::layout(
       xaxis = list(title = '', ticktext = levels(sppdiff$Species), tickvals = sppdiff$Savnum),
       yaxis = yxs,
       showlegend = F
-    ) |> 
+    ) |>
     plotly::config(displayModeBar = F)
 
   troph <- troph_fun(scr)
   
+  # the grade (and hiscr) already reflects how much groups varied from each
+  # other this year, not an absolute magnitude, so the wording says that
+  # explicitly rather than "a little"/"a lot", which reads as an absolute
+  # claim and can look contradicted by the per-species percent differences
+  # shown just below (e.g. a grade of A doesn't mean those are near zero,
+  # only that this group was more consistent than most others that year)
   txtdev <- dplyr::case_when(
-    scr == 'A' ~ 'reported values deviate very little from the average',
-    hiscr ~ 'reported values deviate a little from the average',
-    !hiscr ~ 'reported values deviate a lot from the average',
+    scr == 'A' ~ 'reported values are more consistent than other groups',
+    hiscr ~ 'reported values are about as consistent as other groups',
+    !hiscr ~ 'reported values are less consistent than other groups',
   )
   
-  sgndffuni <- unique(sign(sppdiff$avediff))
+  sgndffuni <- unique(sign(sppdiff_genuine[[devcol]]))
   
   txtdir <- dplyr::case_when(
     scr == 'A' ~ ', good job!',
-    length(sgndffuni) > 1 & scr != 'A' ~ ', varies by species',
-    sgndff == '+' & hiscr & scr != 'A' ~ ', slightly higher',
-    sgndff == '-' & hiscr & scr != 'A' ~ ', slightly lower',
-    sgndff == '+' & !hiscr & scr != 'A' ~ ', much higher',
-    sgndff == '-' & !hiscr & scr != 'A' ~ ', much lower', 
+    length(sgndffuni) > 1 & scr != 'A' ~ ', direction varies by species',
+    sgndff == '+' & hiscr & scr != 'A' ~ ', typically slightly higher',
+    sgndff == '-' & hiscr & scr != 'A' ~ ', typically slightly lower',
+    sgndff == '+' & !hiscr & scr != 'A' ~ ', typically much higher',
+    sgndff == '-' & !hiscr & scr != 'A' ~ ', typically much lower',
     T ~ ''
   )
   txtdsc <- paste0('<span><h3><b>', scr, '&nbsp;', troph, '</b></h3><h4> ', txtdev, txtdir, '</h4></span>')
@@ -741,11 +864,14 @@ calibrate_scr_fun <- function(trndat, metric = c(Abundance = 'abs', `Blade Lengt
 #'   rationale. Should match the \code{metric} used to build \code{cal}.
 #'   Transect-level weighting already happened inside \code{\link{sppdiff_fun}}
 #'   when species values were computed; combining species into a metric score
-#'   here is a weighted mean of each species' (already transect-weighted)
-#'   absolute deviation, weighted by \code{1 + devsd} or \code{1 + devcv} (see
-#'   \code{\link{sppdiff_fun}}): a species this group was inconsistent on
-#'   across transects counts *more*, not less, since that inconsistency is
-#'   the group's own performance rather than a site or cross-group effect
+#'   here is a plain (unweighted) mean of each species' (already
+#'   transect-weighted) absolute deviation. There is deliberately no further
+#'   per-species weighting at this level: an earlier version amplified a
+#'   species a group was inconsistent on across transects, but with typically
+#'   only 2-4 transects per species that consistency estimate was mostly
+#'   sample-size noise plus the true value's own spatial pattern, not a
+#'   reliable signal about the group, so it was dropped rather than kept as
+#'   an unreliable weight
 allgrpscr_fun <- function(trndat, yr, truvar, raw = F, raw_diff = FALSE, cal = NULL, k = 50,
                            metric = c(Abundance = 'abs', `Blade Length` = 'pct', `Short Shoot Density` = 'pct')){
 
@@ -769,12 +895,10 @@ allgrpscr_fun <- function(trndat, yr, truvar, raw = F, raw_diff = FALSE, cal = N
       avediff = purrr::pmap(list(evalgrp, var), function(evalgrp, var){
         sppdiff_fun(evalgrp, var) |>
           dplyr::mutate(
-            devval = if(metric[[var]] == 'pct') aveperc else avediff,
-            sprd   = if(metric[[var]] == 'pct') devcv   else devsd,
-            wt     = 1 + dplyr::coalesce(sprd, 0)
+            devval = if(metric[[var]] == 'pct') aveperc else avediff
           ) |>
           dplyr::summarise(
-            avediff = weighted.mean(abs(devval), wt, na.rm = T)
+            avediff = mean(abs(devval), na.rm = T)
           ) |>
           dplyr::pull(avediff)
       })
@@ -942,48 +1066,60 @@ troph_fun <- function(scr){
 #'
 #' @param evalgrp data frame as returned by \code{\link{evalgrp_fun}}
 #' @param spp character, species to summarize
-sppimp_fun <- function(evalgrp, spp = c('seagrass', 'macroalgae')){
-  
+#'
+#' @details Flags two kinds of species-ID error within the \code{spp} group
+#'   (Step 3): a missed species (on the consensus list but not reported,
+#'   \code{Abundance aveval} unresolved) and a false positive (reported but
+#'   not on the consensus list, \code{Abundance truval} unresolved). Both are
+#'   reported together when both occur.
+sppimp_fun <- function(evalgrp, spp = c('seagrass', 'non-sav')){
+
   lnk <- 'https://drive.google.com/file/d/1naZpND_Ur90abqND-ZhZ_fJtBBiuetjt/view'
-  
+
   spp <- match.arg(spp)
 
   if(spp == 'seagrass')
-    sppid <- evalgrp |> 
-      dplyr::filter(Species %in% savspecies()) 
-  
-  if(spp == 'macroalgae')
-    sppid <- evalgrp |> 
+    sppid <- evalgrp |>
+      dplyr::filter(Species %in% savspecies())
+
+  if(spp == 'non-sav')
+    sppid <- evalgrp |>
       dplyr::filter(!Species %in% savspecies())
 
-  sppmiss <- sppid |> 
-    dplyr::filter(is.na(`Abundance aveval`)) |> 
-    dplyr::select(Species) |> 
+  sppmiss <- sppid |>
+    dplyr::filter(is.na(`Abundance aveval`) & !is.na(`Abundance truval`)) |>
+    dplyr::select(Species) |>
     dplyr::distinct()
-  
-  txtout <- 'All species found, good job!'
+
+  sppfp <- sppid |>
+    dplyr::filter(!is.na(`Abundance aveval`) & is.na(`Abundance truval`)) |>
+    dplyr::select(Species) |>
+    dplyr::distinct()
+
+  # a count of 1 vs more reads as 'one'/'a few' in both messages below
+  cnttxt <- function(x) if(length(x) == 1) 'one' else 'a few'
+
+  txtmiss <- NULL
   if(nrow(sppmiss) > 0){
-    
-    sppmiss <- sppmiss |> 
-      dplyr::pull(Species) |> 
-      sort()
-    
-    nmiss <- 'a few'
-    if(length(sppmiss) == 1)
-      nmiss <- 'one'
- 
-    sppmiss <- sppmiss |> 
-      paste(collapse = ', ')
-    
-    txtout <- paste0('Missed ', nmiss, ' (', sppmiss, ')! Check out the species guide at the link <a target="_blank" href="', lnk, '">here</a>.')
-    
+    sppmiss <- sppmiss |> dplyr::pull(Species) |> sort()
+    txtmiss <- paste0('Missed ', cnttxt(sppmiss), ' (', paste(sppmiss, collapse = ', '), ')! Check out the species guide at the link <a target="_blank" href="', lnk, '">here</a>.')
   }
-    
+
+  txtfp <- NULL
+  if(nrow(sppfp) > 0){
+    sppfp <- sppfp |> dplyr::pull(Species) |> sort()
+    txtfp <- paste0('Reported ', cnttxt(sppfp), ' species not confirmed by any other group (', paste(sppfp, collapse = ', '), ')! Check out the species guide at the link <a target="_blank" href="', lnk, '">here</a>.')
+  }
+
+  txtout <- paste(c(txtmiss, txtfp), collapse = ' ')
+  if(is.null(txtmiss) & is.null(txtfp))
+    txtout <- 'All species found, good job!'
+
   out <- paste0('<span><h4>', txtout, '</h4></span>')
   out <- gt::html(out)
-  
+
   return(out)
-  
+
 }
 
 #' Get character vector of sav species for filtering

@@ -93,8 +93,8 @@ sppimp_fun(evalgrp, 'seagrass')
 ```
 
 ```{r}
-#| title: "Macroalgae identification"
-sppimp_fun(evalgrp, 'macroalgae') 
+#| title: "Non-SAV identification"
+sppimp_fun(evalgrp, 'non-sav')
 ```
 
 ::: {.card title="Additional resources"}
