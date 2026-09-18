@@ -273,14 +273,15 @@ evalgrp_fun <- function(trndat, yr, grp, truvar){
 #' @param evalgrp data frame, group evaluation data
 #'
 #' @details Rows are grouped by species (not transect), matching how the
-#'   metrics are actually aggregated for scoring (Step 4 combines a species'
-#'   values across transects, not a transect's values across species).
-#'   Species not on the consensus SAV list (\code{\link{savspecies}}, i.e.
-#'   macroalgae) are listed as a separate, visually muted block at the
-#'   bottom of the table: they are scored on Abundance (a missed or
-#'   falsely-reported species counts there regardless of species type,
-#'   Step 3), but not on Blade Length or Short Shoot Density, which are not
-#'   measured for macroalgae.
+#'   metrics are actually aggregated for scoring (Steps 3-7 combine a
+#'   species' values across transects, not a transect's values across
+#'   species). Species not on the consensus SAV list
+#'   (\code{\link{savspecies}}, i.e. macroalgae) are listed as a separate,
+#'   visually muted block at the bottom of the table: they are scored on
+#'   Abundance (a missed or falsely-reported species counts there regardless
+#'   of species type, see Species Identification Penalties in Steps 3-7),
+#'   but not on Blade Length or Short Shoot Density, which are not measured
+#'   for macroalgae.
 evaltrntab_fun <- function(evalgrp){
 
   rptcol <- '#004F7E'
@@ -431,8 +432,9 @@ evaltrntab_fun <- function(evalgrp){
 #'   frame are for display only (rounded to a whole category for Abundance)
 #'   and are not the values \code{avediff} is derived from. Abundance is
 #'   scored for every consensus species, including macroalgae, since a
-#'   missed or falsely-reported species is itself a scoreable event (Step 3)
-#'   regardless of species type. A false positive (\code{truval} unresolved
+#'   missed or falsely-reported species is itself a scoreable event (see
+#'   Species Identification Penalties in Steps 3-7) regardless of species
+#'   type. A false positive (\code{truval} unresolved
 #'   because no other group corroborated the species there) contributes a
 #'   flat one-category \code{dif} of 1, not the reported category minus the
 #'   imputed true value: what category the group happened to report is not
@@ -570,21 +572,36 @@ sppdiff_fun <- function(evalgrp, vr = c('Abundance', 'Blade Length', 'Short Shoo
 }
 
 #' Create summary card for species metric
-#' 
+#'
 #' @param evalgrp data frame with evaluation group data
 #' @param grp character with group name
 #' @param allgrpscr data frame with all group scores
 #' @param vr character vector with variable name
-card_fun <- function(evalgrp, grp, allgrpscr, vr = c('Abundance', 'Blade Length', 'Short Shoot Density')){
-  
+#' @param metric named character vector giving the deviation basis to display
+#'   per score variable, must match the basis actually used to score \code{vr}
+#'   (see \code{\link{calibrate_scr_fun}} for the default and rationale),
+#'   otherwise the card's text/plot would show a different quantity than the
+#'   letter grade it's describing
+card_fun <- function(evalgrp, grp, allgrpscr, vr = c('Abundance', 'Blade Length', 'Short Shoot Density'),
+                      metric = c(Abundance = 'abs', `Blade Length` = 'abs', `Short Shoot Density` = 'pct')){
+
   vr <- match.arg(vr)
-  
-  # display units differ by metric: Abundance is scored on raw category
-  # positions, Blade Length/Short Shoot Density on percent difference (Step 4)
+
+  # display units differ by metric: Abundance and Blade Length are scored on
+  # a raw difference (category positions, cm), Short Shoot Density on percent
+  # difference (Steps 3-7); see calibrate_scr_fun for why that split exists
   vruni <- c('Abundance' = 'mean BB categories away',
              'Blade Length' = 'difference on average',
              'Short Shoot Density' = 'difference on average')
   vruni <- vruni[[vr]]
+
+  # unit label for the abs-basis continuous metric (Blade Length); Abundance's
+  # abs-basis values are plain category-position integers with no unit suffix.
+  # Looked up once here (not inline in case_when below) because case_when
+  # evaluates every branch's RHS regardless of which one ends up selected,
+  # and abs_units[[vr]] would error for vr == 'Abundance', which has no entry
+  abs_units <- c('Blade Length' = 'cm', 'Short Shoot Density' = 'shoots/m2')
+  unit_lab  <- if(vr %in% names(abs_units)) abs_units[[vr]] else ''
 
   rptcol  <- '#004F7E'
   trucol  <- '#958984'
@@ -599,9 +616,10 @@ card_fun <- function(evalgrp, grp, allgrpscr, vr = c('Abundance', 'Blade Length'
 
   # for Abundance, a false positive or missed species has a mechanically
   # forced sign (always +1 for a false positive, always <= 0 for a missed
-  # species, Step 3): including them here would make "how consistent is the
-  # direction of error across species" reflect species-ID events instead of
-  # genuine reporting bias. This subset (not sppdiff itself) is what decides
+  # species, see Species Identification Penalties in Steps 3-7): including
+  # them here would make "how consistent is the direction of error across
+  # species" reflect species-ID events instead of genuine reporting bias.
+  # This subset (not sppdiff itself) is what decides
   # the overall direction (sgndff) and cross-species consistency (sgndffuni)
   # below. Blade Length/Short Shoot Density have no such flags and are
   # unaffected. Falls back to the full set if every species had an event.
@@ -620,9 +638,10 @@ card_fun <- function(evalgrp, grp, allgrpscr, vr = c('Abundance', 'Blade Length'
 
   hiscr <- scr %in% c('A-', 'B+', 'B')
 
-  # column actually used for scoring this metric (Step 4): category
-  # difference for Abundance, percent difference for the other two
-  devcol <- if(vr == 'Abundance') 'avediff' else 'aveperc'
+  # column actually used for scoring this metric (Steps 3-7): category
+  # difference for Abundance and cm difference for Blade Length (both
+  # 'abs'), percent difference for Short Shoot Density ('pct')
+  devcol <- if(metric[[vr]] == 'pct') 'aveperc' else 'avediff'
 
   # overall diff (genuine species only for Abundance, see sppdiff_genuine above)
   sgndff <- sppdiff_genuine |>
@@ -644,7 +663,11 @@ card_fun <- function(evalgrp, grp, allgrpscr, vr = c('Abundance', 'Blade Length'
         sgndff == 1 ~ '+',
         sgndff == -1 ~ '' # already a negative prefix
       ),
-      dispval = if(vr == 'Abundance') as.character(dispval) else paste0(round(dispval * 100, 0), '%'),
+      dispval = dplyr::case_when(
+        vr == 'Abundance' ~ as.character(dispval),
+        metric[[vr]] == 'pct' ~ paste0(round(dispval * 100, 0), '%'),
+        T ~ paste0(sprintf('%.1f', dispval), ' ', unit_lab)
+      ),
       dispval = ifelse(is.na(.data[[devcol]]), 'not recorded', dispval),
       dispval = dplyr::case_when(
         dispval == 'not recorded' ~ dispval,
@@ -654,8 +677,9 @@ card_fun <- function(evalgrp, grp, allgrpscr, vr = c('Abundance', 'Blade Length'
 
   # for Abundance, a false positive or missed species swaps in a short
   # explanation instead of the generic category-difference text: the
-  # numeric difference alone (a flat 1 for a false positive, Step 3) does
-  # not say why, and is not informative on its own
+  # numeric difference alone (a flat 1 for a false positive, see Species
+  # Identification Penalties in Steps 3-7) does not say why, and is not
+  # informative on its own
   if(vr == 'Abundance'){
     abulab <- c('no coverage', 'solitary', 'few', '<5%', '5-25%', '25-50%', '51-75%', '76-100%')
     spptxt <- spptxt |>
@@ -692,9 +716,9 @@ card_fun <- function(evalgrp, grp, allgrpscr, vr = c('Abundance', 'Blade Length'
   spptxt <- paste0('<div style="flex: 1 1 auto; min-height: 0; max-height: 200px; overflow-y: auto;">', spptxt, '</div>')
 
   # barplot prep: species-level difference from true (bar{d}_s), centered at
-  # zero, on the same basis Step 4 actually scores on (category difference
-  # for Abundance, percent difference for Blade Length/Short Shoot Density).
-  # No error bar here: an earlier version showed a per-species consistency
+  # zero, on the same basis Steps 3-7 actually score on (category difference
+  # for Abundance, cm difference for Blade Length, percent difference for
+  # Short Shoot Density). No error bar here: an earlier version showed a per-species consistency
   # estimate (gamma_s), but that was dropped from scoring entirely (see
   # sppdiff_fun) since with typically only 2-4 transects per species it was
   # mostly sample-size noise, so there is nothing reliable left to plot.
@@ -702,10 +726,11 @@ card_fun <- function(evalgrp, grp, allgrpscr, vr = c('Abundance', 'Blade Length'
     dplyr::filter(!is.na(.data[[devcol]]))
 
   # a false positive's bar is always the same flat 1-category difference
-  # (Step 3), so it adds visual clutter without adding information the plot
-  # is meant to convey; it's still covered in the text narrative to the
-  # right. Missed species are left in the plot, their bar height still
-  # reflects the true abundance that was missed (Step 3).
+  # (see Species Identification Penalties in Steps 3-7), so it adds visual
+  # clutter without adding information the plot is meant to convey; it's
+  # still covered in the text narrative to the right. Missed species are
+  # left in the plot, their bar height still reflects the true abundance
+  # that was missed (same section).
   if(vr == 'Abundance'){
     sppdiff <- sppdiff |> dplyr::filter(!any_fp)
   }
@@ -716,10 +741,11 @@ card_fun <- function(evalgrp, grp, allgrpscr, vr = c('Abundance', 'Blade Length'
       # order, rather than factor()'s default alphabetical re-sort
       Species = factor(Species, levels = unique(Species)),
       Savnum = as.numeric(Species),
-      plotval = if(vr == 'Abundance') avediff else aveperc * 100,
+      plotval = if(metric[[vr]] == 'pct') aveperc * 100 else avediff,
       # bar color flags a false positive or missed species (Abundance only,
-      # see Step 3): the bar height alone doesn't distinguish a genuine
-      # disagreement from a species-ID error
+      # see Species Identification Penalties in Steps 3-7): the bar height
+      # alone doesn't distinguish a genuine disagreement from a species-ID
+      # error
       barcol = if(vr == 'Abundance'){
         dplyr::case_when(
           any_fp ~ fpcol,
@@ -735,7 +761,8 @@ card_fun <- function(evalgrp, grp, allgrpscr, vr = c('Abundance', 'Blade Length'
   yrng <- c(-rngmax, rngmax)
 
   # y-axis units and hover text differ by metric: category difference for
-  # Abundance, percent difference for Blade Length/Short Shoot Density
+  # Abundance, cm difference for Blade Length (both 'abs'), percent
+  # difference for Short Shoot Density ('pct')
   if(vr == 'Abundance'){
     yxs <- list(title = 'Avg. diff. from true<br>(+/- categories)', range = yrng, zeroline = TRUE, zerolinewidth = 2, zerolinecolor = '#444444')
     hovtxt <- paste0(
@@ -746,9 +773,12 @@ card_fun <- function(evalgrp, grp, allgrpscr, vr = c('Abundance', 'Blade Length'
         T ~ ''
       )
     )
-  } else {
+  } else if(metric[[vr]] == 'pct'){
     yxs <- list(title = 'Avg. diff. from true (%)', range = yrng, zeroline = TRUE, zerolinewidth = 2, zerolinecolor = '#444444')
     hovtxt <- paste0(sppdiff$Species, ': ', ifelse(sppdiff$plotval > 0, '+', ''), round(sppdiff$plotval, 0), '%')
+  } else {
+    yxs <- list(title = paste0('Avg. diff. from true<br>(', unit_lab, ')'), range = yrng, zeroline = TRUE, zerolinewidth = 2, zerolinecolor = '#444444')
+    hovtxt <- paste0(sppdiff$Species, ': ', ifelse(sppdiff$plotval > 0, '+', ''), round(sppdiff$plotval, 1), ' ', unit_lab)
   }
 
   # bar plot: one bar per species, centered at zero
@@ -809,29 +839,50 @@ card_fun <- function(evalgrp, grp, allgrpscr, vr = c('Abundance', 'Blade Length'
 
 #' Compute per-metric calibration constants from historical within-year spread
 #'
-#' For each year, computes the within-year SD of group weighted-mean
-#' deviations per metric (how spread out groups were relative to each other).
-#' Returns the mean and SD of those yearly spreads so a focal year can be
-#' z-scored against history to adjust the grade floor.
+#' For each year in a fixed calibration window (the earliest \code{n_cal_yrs}
+#' years of training data), computes the within-year SD of group
+#' weighted-mean deviations per metric (how spread out groups were relative
+#' to each other). Returns the mean of those yearly spreads so a focal year
+#' can be compared against that fixed baseline to adjust the grade floor.
+#'
+#' The calibration window is fixed rather than "all years seen so far" so
+#' that the baseline doesn't drift every time a new season of data is added.
+#' Under a growing window, adding a new year could retroactively change the
+#' calibrated floor (and thus scores) for every previously generated report
+#' card, even though nothing about those earlier years' performance changed.
+#' Pinning the window to the earliest years keeps already-published scores
+#' reproducible; revisiting where that window ends is a deliberate choice,
+#' not an automatic one.
 #'
 #' @param trndat data frame, training data
 #' @param metric named character vector giving the deviation basis to use per
 #'   score variable (or a single unnamed \code{'abs'}/\code{'pct'}, recycled to
 #'   all three). \code{'abs'} uses raw absolute deviations (original units,
 #'   e.g. cm or shoots/m2); \code{'pct'} uses the symmetric percent difference
-#'   instead so the spread doesn't scale with the magnitude of the true value
+#'   instead so the spread scales with the magnitude of the true value
 #'   (see \code{\link{sppdiff_fun}}). Default keeps Abundance on its ordinal
 #'   absolute scale (already unitless and applied the same way to every
-#'   species) and scores Blade Length and Short Shoot Density on percent
-#'   difference (their natural scale varies by species and by the true mean)
+#'   species). Blade Length and Short Shoot Density default differently from
+#'   each other: measurement disagreement in blade length doesn't grow with
+#'   how long the blade is (closer to a fixed measurement precision), so it
+#'   stays on the raw cm scale, while shoot count disagreement does grow with
+#'   how dense the bed is (a count-like process), so it's scored on percent
+#'   difference to keep that from being read as a change in agreement (see
+#'   the "Why the difference basis differs by metric" section of the scoring
+#'   document for the supporting analysis)
+#' @param n_cal_yrs integer, number of earliest years of \code{trndat} to use
+#'   as the fixed calibration window (default 5)
 #'
-#' @return named list with element \code{mean_sd}, a named list of per-metric
-#'   historical mean within-year spreads
-calibrate_scr_fun <- function(trndat, metric = c(Abundance = 'abs', `Blade Length` = 'pct', `Short Shoot Density` = 'pct')){
+#' @return named list with elements \code{mean_sd}, a named list of per-metric
+#'   mean within-year spreads over the calibration window, and \code{cal_yrs},
+#'   the years that window covers
+calibrate_scr_fun <- function(trndat, metric = c(Abundance = 'abs', `Blade Length` = 'abs', `Short Shoot Density` = 'pct'),
+                               n_cal_yrs = 5){
 
-  yrs <- unique(trndat$yr)
+  cal_yrs <- sort(unique(trndat$yr))
+  cal_yrs <- cal_yrs[seq_len(min(n_cal_yrs, length(cal_yrs)))]
 
-  yr_spreads <- purrr::map(yrs, function(yr){
+  yr_spreads <- purrr::map(cal_yrs, function(yr){
     truvar <- truvar_fun(trndat, yr)
     allgrpscr_fun(trndat, yr, truvar, raw_diff = TRUE, metric = metric) |>
       dplyr::summarise(dplyr::across(Abundance:`Short Shoot Density`,
@@ -844,7 +895,8 @@ calibrate_scr_fun <- function(trndat, metric = c(Abundance = 'abs', `Blade Lengt
     mean_sd = yr_spreads |>
       dplyr::summarise(dplyr::across(Abundance:`Short Shoot Density`,
                                      ~ mean(.x, na.rm = TRUE))) |>
-      as.list()
+      as.list(),
+    cal_yrs = cal_yrs
   )
 
 }
@@ -873,7 +925,7 @@ calibrate_scr_fun <- function(trndat, metric = c(Abundance = 'abs', `Blade Lengt
 #'   reliable signal about the group, so it was dropped rather than kept as
 #'   an unreliable weight
 allgrpscr_fun <- function(trndat, yr, truvar, raw = F, raw_diff = FALSE, cal = NULL, k = 50,
-                           metric = c(Abundance = 'abs', `Blade Length` = 'pct', `Short Shoot Density` = 'pct')){
+                           metric = c(Abundance = 'abs', `Blade Length` = 'abs', `Short Shoot Density` = 'pct')){
 
   varnms <- c('Abundance', 'Blade Length', 'Short Shoot Density')
   if(is.null(names(metric)))
@@ -999,7 +1051,7 @@ scrsum_fun <- function(allgrpscr, grp){
   if(totscr == grdlvs[length(grdlvs)])
     lower <- NULL
   
-  screxp <- 'Your group\'s overall score reflects how closely your reported values match the group averages, calibrated against historical performance across all training years. The overall score is based on the average of the scores below for species abundance, blade length, and short shoot density. To learn more about how scores are calculated, check out the <a target="_blank" href="https://tbep-tech.github.io/seagrasstransect-training-reports/scoring.html">scoring document</a>.'
+  screxp <- 'Your group\'s overall score reflects how closely your reported values match the group averages, calibrated against typical performance from a fixed baseline period of past training years. The overall score is based on the average of the scores below for species abundance, blade length, and short shoot density. To learn more about how scores are calculated, check out the <a target="_blank" href="https://tbep-tech.github.io/seagrasstransect-training-reports/scoring.html">scoring document</a>.'
   
   # ouput as list
   out <- paste0('
@@ -1068,7 +1120,8 @@ troph_fun <- function(scr){
 #' @param spp character, species to summarize
 #'
 #' @details Flags two kinds of species-ID error within the \code{spp} group
-#'   (Step 3): a missed species (on the consensus list but not reported,
+#'   (see Species Identification Penalties in Steps 3-7 of the scoring
+#'   document): a missed species (on the consensus list but not reported,
 #'   \code{Abundance aveval} unresolved) and a false positive (reported but
 #'   not on the consensus list, \code{Abundance truval} unresolved). Both are
 #'   reported together when both occur.
@@ -1144,7 +1197,7 @@ savspecies <- function(){
 #'
 #' @details some years have mroe than one group participating, e.g., two SWFWMD groups, scores are averaged in these cases
 allyrscr_fun <- function(trndat, na.rm = T, usemon = TRUE, cal = NULL,
-                          metric = c(Abundance = 'abs', `Blade Length` = 'pct', `Short Shoot Density` = 'pct')){
+                          metric = c(Abundance = 'abs', `Blade Length` = 'abs', `Short Shoot Density` = 'pct')){
 
   data(file = 'trnlns', package = 'tbeptools')
 
