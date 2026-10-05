@@ -73,32 +73,32 @@ Scores are calculated for three field measurements for each seagrass species:
 
 Whether each group correctly identified which species were present is also factored into the abundance score. These three metric scores are averaged into an overall total score, which is then converted to a letter grade.
 
-Note that "transect" is used herein to describe the intercalibration sites during training, which are quadrats at fixed locations.  For the actual transect sampling, sites are set meter marks along a transect line.
+Note that "transect" is used herein to describe the intercalibration sites during training, which are quadrats at fixed locations.  For the actual transect sampling, sites are at set meter marks along a transect line.
 
 ### The scoring workflow, step by step
 
 The full scoring workflow, from raw field data to a final letter grade, is:
 
 1. Identify the "true" (consensus) species at each transect.
-2. Calculate the "true" value for each metric at each transect, as the cross-group average.
+2. Calculate the "true" value for each metric and species at each transect, as the cross-group average.
 3. Calculate the cross-group variation in reported values for each species/transect/metric, for the transect-level weight.
 4. Calculate each group's difference (reported minus true) for each species/transect/metric.
 5. Apply the transect-level weight from step 3 to each transect's difference from step 4, discounting differences at transects where groups disagreed a lot.
 6. Combine the weighted per-transect differences from step 5 across transects into one difference value per species/metric, using a true weighted average (weighted by the same transect-level weight from step 3, not a plain average), so a transect with a larger weight counts for more.
 7. Roll up species into a raw metric score as the plain average of those per-species differences.
-8. Establish the typical spread of raw metric scores between groups within a year, using a fixed baseline period of `r length(cal$cal_yrs)` years (`r min(cal$cal_yrs)`-`r max(cal$cal_yrs)`), this is the baseline every year (including years in the baseline itself) is compared against to judge whether that year was unusually tight or loose. The baseline is fixed rather than recomputed as new years are added, so a report card's calibration doesn't shift after the fact.
+8. Establish the typical spread of raw metric scores between groups within each year, using a fixed baseline period of `r length(cal$cal_yrs)` years (`r min(cal$cal_yrs)`-`r max(cal$cal_yrs)`), this is the baseline every year (including years in the baseline itself) that is compared against to judge whether a focal year was unusually tight or loose.
 9. Calibrate the score floor for that year and metric based on how tight or loose the cohort was that year relative to the typical spread from step 8, then rescale the raw score to a 0-100 numeric score.
 10. Get the overall Total score as the plain average of the three metrics' numeric scores, then convert every numeric score, per-metric and Total, to a letter grade using fixed thresholds.
 
-The list above reads top to bottom, but the steps aren't a single chain: step 3's weight is reused twice (in step 5 and again in step 6), and step 8 is a separate calibration pipeline built once from the fixed baseline years, not something computed along the way for a given group, it only joins back in at step 9. The diagram below shows those connections.
+The steps are connected as shown below in the diagram.
 
-![The scoring workflow's steps and their dependencies. Step 3's weight is reused in both Step 5 and Step 6, and Step 8 is a separate calibration pipeline built once from the fixed baseline years, joining back in only at Step 9.](../images/scoring_process.png){#fig-scoring-process}
+![The scoring workflow's steps and their dependencies. Step 3's weights are reused in both Step 5 and Step 6, and Step 8 is a separate calibration pipeline built once from the fixed baseline years, joining back in only at Step 9.](../images/scoring_process.png){#fig-scoring-process}
 
-The sections below work through each of these ten steps in detail. Section headings are grouped to match how the steps are connected, so a heading spanning several step numbers (e.g. "Steps 3-7") covers all of them together rather than one at a time, ending with a full worked example applying all ten steps to one group.
+The sections below work through each of these ten steps in detail. A full worked example applied to one group follows the detailed descriptions.
 
 ## Step 1: The Consensus Species List
 
-Not every species recorded across all groups counts toward scoring. A species at a given transect (site/quadrat) is considered present if at least two distinct groups reported it with non-zero abundance. This removes likely misidentifications while still being inclusive, i.e., a species does not need to be unanimous, just corroborated.  Species identifications include seagrass and macroalgae. Both are scored on Abundance, since correctly identifying a species as present or absent matters regardless of species type (see *Species Identification Penalties* below), but only seagrass is used to assess Blade Length and Short Shoot Density, which are not measured for macroalgae.
+Not every species recorded across all groups counts toward scoring. A species at a given transect (site/quadrat) is considered present if at least two distinct groups reported it with non-zero abundance. This removes likely misidentifications while still being inclusive, i.e., a species does not need to be unanimous, just corroborated.  False positives (found by the current group but not found by any other groups) or true negatives (found by at least two other groups but not the current group) are considered in the abundance metric calculations. Species identifications include seagrass and macroalgae. Both are scored on Abundance, but only seagrass is used to assess Blade Length and Short Shoot Density.
 
 ```{r}
 #| label: tbl-truespp
@@ -135,7 +135,7 @@ truespp |>
   )
 ```
 
-The consensus list is created per transect, so a species may be on the list at one transect but not another.
+The consensus list is evaluated per transect, so a species may be on the list at one transect but not another.
 
 ## Step 2: True Values
 
@@ -178,15 +178,15 @@ truvar |>
 
 ## Steps 3-7: Group Differences and Metric Scores
 
-For each metric (Abundance, Blade Length, Short Shoot Density), a group's reported values are compared to the true values species by species and transect by transect, then rolled up step by step into a single score per group per metric. Before any of that rollup, though, a report can go wrong in a different way: reporting a species that isn't really there, or missing one that is. Those species identification errors are handled first, since they change what counts as a "difference" in the first place.
+For each metric (Abundance, Blade Length, Short Shoot Density), a group's reported values are compared to the true values species by species and transect by transect, then rolled up into a single score per group per metric. Species misidentifications (false positive or true negative) are evaluated first before rollup, since they change what counts as a difference from the true values.
 
 ### Species Identification Penalties
 
 Comparing a group's reported values to the true values across all consensus species and transects reveals two types of species identification errors:
 
-**Missed species**: a species is present but the group did not record it. The group's abundance for that species is treated as "no coverage" (BB value 0) when computing the difference. The penalty scales with the true abundance of the missed species: missing a rare species is a small error, while missing a dominant one is a large error.
+**True negatives (missed species)**: a species is present but the group did not record it. The group's abundance for that species is treated as "no coverage" (BB value 0) when computing the difference. The penalty scales with the true abundance of the missed species, such that missing a rare species is a small error, while missing a dominant one is a large error.
 
-**False positives**: the group recorded a species that is not on the consensus list (i.e., no other group confirmed it). The true abundance is treated as "no coverage" (BB value 0), but unlike a missed species, the penalty is a fixed one category difference, not scaled by how high the group's reported abundance was. What category a group happens to report for a species nobody else saw is not evidence about whether the species was really there, so it should not make the penalty any larger or smaller. A false positive is still an error and still counts against the score, it just counts the same regardless of whether it was reported at "solitary" or "76-100%" cover.
+**False positives**: the group recorded a species that is not on the consensus list (i.e., no other group confirmed it). The true abundance is treated as "no coverage" (BB value 0), but unlike a missed species, the penalty is a fixed one category difference from zero. What category a group happens to report for a species nobody else saw is not evidence about whether the species was really there, so the penalty does not scale with the reported abundance.
 
 These penalties only affect the abundance score. Blade Length and Short Shoot Density cannot be meaningfully penalised for species that were not found.
 
@@ -229,7 +229,7 @@ evalgrp |>
 
 ### Per-transect difference and weight
 
-At each **transect**, a difference is discounted when the different groups had a lot of trouble agreeing with each other there. That disagreement reflects how hard the species was to pin down at that specific site. It is not the evaluated group's own performance. This is the only place a weight is applied. An earlier version of this methodology also tried to weight species by how consistent a group's own difference was for that species across transects, but with typically only 2-4 transects per species per group that estimate was mostly sample-size noise (see *Combining species into a metric score* below), so species are instead combined with a plain average.
+At each **transect**, a difference is discounted when the different groups had highly variable estimates. That disagreement reflects how hard the species/metric was to measure at that specific site. It is not the evaluated group's own performance. This is the only place a weight is applied. An earlier version of this methodology also tried to weight species by how consistent a group's own difference was for that species across transects, but with typically only 2-4 transects per species per group that estimate was mostly sample-size noise (see *Combining species into a metric score* below), so species are instead combined with a plain average.
 
 At transect $t$, the difference for species $s$ is
 
