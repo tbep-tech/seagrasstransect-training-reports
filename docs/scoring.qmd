@@ -30,9 +30,9 @@ load(here('data/trndat.rda'))
 # example year used throughout
 ex_yr  <- 2025
 
-# difference basis per metric: Abundance and Blade Length on their raw scale,
-# Short Shoot Density as percent (see "Why the difference basis differs by
-# metric" below for why Blade Length and Short Shoot Density differ)
+# difference basis per metric: abundance and blade length on their raw scale,
+# short shoot density as percent (see "Why the difference basis differs by
+# metric" below for why blade length and short shoot density differ)
 scr_metric <- c(Abundance = 'abs', `Blade Length` = 'abs', `Short Shoot Density` = 'pct')
 
 # pre-compute objects reused across sections
@@ -98,7 +98,7 @@ The sections below work through each of these ten steps in detail. A full worked
 
 ## Step 1: The Consensus Species List
 
-Not every species recorded across all groups counts toward scoring. A species at a given transect (site/quadrat) is considered present if at least two distinct groups reported it with non-zero abundance. This removes likely misidentifications while still being inclusive, i.e., a species does not need to be unanimous, just corroborated.  False positives (found by the current group but not found by any other groups) or true negatives (found by at least two other groups but not the current group) are considered in the abundance metric calculations. Species identifications include seagrass and macroalgae. Both are scored on Abundance, but only seagrass is used to assess Blade Length and Short Shoot Density.
+Not every species recorded across all groups counts toward scoring. A species at a given transect (site/quadrat) is considered present if at least two distinct groups reported it with non-zero abundance. This removes likely misidentifications while still being inclusive, i.e., a species does not need to be unanimous, just corroborated.  False positives (found by the current group but not found by any other groups) or true negatives (found by at least two other groups but not the current group) are considered in the abundance metric calculations. Species identifications include seagrass and macroalgae. Both are scored on abundance, but only seagrass is used to assess blade length and short shoot density.
 
 ```{r}
 #| label: tbl-truespp
@@ -178,7 +178,7 @@ truvar |>
 
 ## Steps 3-7: Group Differences and Metric Scores
 
-For each metric (Abundance, Blade Length, Short Shoot Density), a group's reported values are compared to the true values species by species and transect by transect, then rolled up into a single score per group per metric. Species misidentifications (false positive or true negative) are evaluated first before rollup, since they change what counts as a difference from the true values.
+For each metric (abundance, blade length, short shoot density), a group's reported values are compared to the true values, species by species and transect by transect, then rolled into a single score per group per metric. Species misidentifications (false positive or true negative) are evaluated first before rollup, since they change what counts as a difference from the true values.
 
 ### Species Identification Penalties
 
@@ -188,9 +188,9 @@ Comparing a group's reported values to the true values across all consensus spec
 
 **False positives**: the group recorded a species that is not on the consensus list (i.e., no other group confirmed it). The true abundance is treated as "no coverage" (BB value 0), but unlike a missed species, the penalty is a fixed one category difference from zero. What category a group happens to report for a species nobody else saw is not evidence about whether the species was really there, so the penalty does not scale with the reported abundance.
 
-These penalties only affect the abundance score. Blade Length and Short Shoot Density cannot be meaningfully penalised for species that were not found.
+These penalties only affect the abundance score. Blade length and short shoot density cannot be meaningfully penalised for species that were not found.
 
-For Abundance, the difference is computed as a gap in ordinal category positions rather than in raw Braun-Blanquet numeric values. The eight BB categories are treated as equally spaced steps (1 = no coverage through 8 = 76–100%), so a difference of 1 means the group was one category apart from the true value, regardless of the numeric gap between those categories on the BB scale.  This implicitly assumes that there is similar difficulty in distinguishing between lower abundances (e.g., solitary vs few) and higher abundances (e.g., 51-75% vs 76-100%).
+For abundance, the difference is computed as a gap in ordinal category positions rather than in raw Braun-Blanquet numeric values. The eight BB categories are treated as equally spaced steps (1 = no coverage through 8 = 76–100%), so a difference of 1 means the group was one category apart from the true value, regardless of the numeric gap between those categories on the BB scale.  This implicitly assumes that there is similar difficulty in distinguishing between lower abundances (e.g., solitary vs few) and higher abundances (e.g., 51-75% vs 76-100%).
 
 ```{r}
 #| label: tbl-evalgrp
@@ -229,7 +229,7 @@ evalgrp |>
 
 ### Per-transect difference and weight
 
-At each **transect**, a difference is discounted when the different groups had highly variable estimates. That disagreement reflects how hard the species/metric was to measure at that specific site. It is not the evaluated group's own performance. This is the only place a weight is applied. An earlier version of this methodology also tried to weight species by how consistent a group's own difference was for that species across transects, but with typically only 2-4 transects per species per group that estimate was mostly sample-size noise (see *Combining species into a metric score* below), so species are instead combined with a plain average.
+Group scores are based entirely on how similar their estimates compare to the across-group average (the "true" estimate).  The within group difference is also weighted based on how variable the estimates were between groups.  At each transect, a difference is discounted when the different groups had highly variable estimates. That disagreement reflects how hard the species/metric was to measure at that specific site.
 
 At transect $t$, the difference for species $s$ is
 
@@ -237,13 +237,15 @@ $$
 d_{s,t} = \text{reported} - \text{true}
 $$
 
-for Abundance (an ordinal category-position difference, see *Species Identification Penalties* above) and Blade Length (a raw difference in cm), or the symmetric percent difference
+for abundance (an ordinal category-position difference, see *Species Identification Penalties* above) and blade length (a raw difference in cm), or the symmetric percent difference
 
 $$
 d_{s,t} = \frac{\text{reported} - \text{true}}{(\text{reported}+\text{true})/2}
 $$
 
-for Short Shoot Density (see *Absolute vs. percent difference* below). The one exception is a false positive transect for Abundance (see *Species Identification Penalties* above), where $d_{s,t}$ is fixed at 1 rather than computed from the reported category, since what category was reported is not evidence about whether the species was really there. Its weight is
+for short shoot density (see *Absolute vs. percent difference* below). The one exception is a false positive transect for abundance (see *Species Identification Penalties* above), where $d_{s,t}$ is fixed at 1 rather than computed from the reported category, since what category was reported is not evidence about whether the species was really there. 
+
+A species weight at a given transect is
 
 $$
 w_{s,t} = \frac{1}{1+\sigma_{s,t}}
@@ -252,10 +254,10 @@ $$
 where $\sigma_{s,t}$ is the standard deviation, across all groups, of their individually reported values at that transect for that species:
 
 $$
-\sigma_{s,t} = \text{SD}_g\!\left(x_{g,s,t}\right)
+\sigma_{s,t} = \text{SD}\!\left(x_{s,t}\right)
 $$
 
-with $x_{g,s,t}$ denoting group $g$'s reported value for species $s$ at transect $t$, and the standard deviation taken across all reporting groups $g$, not just the group being scored. It measures how much trouble groups had agreeing with each other right there. A transect where fewer than two groups reported a value has an undefined $\sigma_{s,t}$ and gets full weight ($w_{s,t}=1$). This is independent of how much the true value itself might vary from one transect to another. That spatial variability plays no role anywhere in scoring.
+with $x_{s,t}$ denoting all reported values across the groups for species $s$ at transect $t$, and the standard deviation taken across all reporting groups, not just the group being scored. It measures how much trouble groups had agreeing with each other right there. A transect where fewer than two groups reported a value has an undefined $\sigma_{s,t}$ and gets full weight ($w_{s,t}=1$). This is independent of how much the true value itself might vary from one transect to another. That spatial variability plays no role anywhere in scoring.
 
 ### Rolling up to a species value
 
@@ -361,116 +363,8 @@ $$
 \text{metric score}_{\text{raw}} = \frac{1}{S}\sum_s |\bar{d}_s|
 $$
 
-where $S$ is the number of species with a defined $\bar{d}_s$ that year. No further weighting is applied here. An earlier version of this step weighted a species by how consistent the group's own difference was for it across transects, on the reasoning that a species a group measured erratically should count for more. In practice, with typically only 2-4 transects available per species per group, that consistency estimate could not be separated from ordinary sample-size noise, and in several real cases it was driven almost entirely by how much the *true* value happened to vary across the few transects sampled, not by anything about the group's own performance. Rather than weight species by an unreliable number, every species now counts equally.
+where $S$ is the number of species with a defined $\bar{d}_s$ that year. No further weighting is applied here. 
 
-### Absolute vs. percent difference
-
-$d_{s,t}$ is not defined the same way for every metric:
-
-- **Abundance** uses the raw difference in ordinal Braun-Blanquet category positions (as described in *Species Identification Penalties* above). These categories are already unitless and applied the same way to every species, so there is no reason to convert them to a percent basis.
-- **Blade Length** uses the raw difference in cm.
-- **Short Shoot Density** instead uses the symmetric percent difference, averaged across transects (after the per-transect weight, and again after species are combined). This metric is measured in physical units (shoots/m²) where the typical magnitude varies a great deal by species (e.g., Halodule is characteristically much denser than Thalassia) and by how dense the selected quadrats happened to be that year. A raw difference of a few shoots/m² means something very different for a sparse bed than a dense one, and years with higher or lower density across the selected quadrats would otherwise look artificially more or less consistent across groups even when relative agreement hadn't changed. The percent difference puts every species and every year on the same relative scale, so a training year is not judged as unusually "tight" or "loose" just because the selected locations were denser or sparser that year.
-
-Blade Length is also measured in a physical unit (cm) that varies by species, but it is deliberately *not* scored on percent difference. That split is its own topic, covered in *Why the difference basis differs by metric* below.
-
-The weight $\sigma_{s,t}$ follows the same basis as $d_{s,t}$ for each metric:
-
-- **Abundance** and **Blade Length** use $\sigma_{s,t}$ directly, in raw units (category positions, cm).
-- **Short Shoot Density** instead uses $\sigma_{s,t}$'s **coefficient of variation**, dividing it by the true value at that transect, for the same reason $d_{s,t}$ does.
-
-When $\sigma_{s,t}$ cannot be computed (fewer than two groups reporting at that transect), the weight defaults to its neutral value, full weight ($w_{s,t}=1$), for every metric.
-
-### Why the difference basis differs by metric
-
-Percent (or CV) normalization is only the right choice when the *typical size of a measurement disagreement* itself scales with the magnitude of the true value, a proportional, multiplicative error. If disagreement is instead roughly constant regardless of magnitude, an additive error, dividing by the true value doesn't remove a scale effect, it creates one: the same absolute disagreement looks smaller wherever the true value happens to be larger, for reasons that have nothing to do with how consistent groups actually were.
-
-The figure below tests this directly using every species/year combination across the full training record. Each point is one species in one year: its true value (x-axis) against the mean absolute disagreement between groups that year (y-axis), both in the metric's native units.
-
-```{r}
-#| label: fig-magnitude-error
-#| fig-cap: "Mean absolute disagreement between groups vs. true value magnitude, one point per species/year, across the full training record. Short Shoot Density shows a strong positive relationship: disagreement grows with density, consistent with a count-like process, so dividing by the true value correctly removes that scale effect. Blade Length shows essentially none: disagreement doesn't grow with blade length, so dividing by the true value would introduce a scale effect rather than remove one."
-#| fig-height: 4.5
-#| fig-width: 9.5
-
-all_yrs <- sort(unique(trndat$yr))
-
-mag_err_dat <- purrr::map(c('Blade Length', 'Short Shoot Density'), function(vr){
-  purrr::map(all_yrs, function(y){
-    tv   <- truvar_fun(trndat, y)
-    grps <- trndat |> dplyr::filter(yr == y) |> dplyr::pull(grpact) |> unique()
-    purrr::map(grps, function(g){
-      eg <- evalgrp_fun(trndat, y, g, tv)
-      sppdiff_fun(eg, vr) |> dplyr::mutate(grpact = g, yr = y, metric = vr)
-    }) |> dplyr::bind_rows()
-  }) |> dplyr::bind_rows()
-}) |> dplyr::bind_rows()
-
-mag_err_summ <- mag_err_dat |>
-  dplyr::summarise(
-    true_val = mean(truval, na.rm = TRUE),
-    abs_diff = mean(abs(avediff), na.rm = TRUE),
-    .by = c(metric, yr, Species)
-  ) |>
-  dplyr::filter(!is.na(true_val), !is.na(abs_diff))
-
-mag_err_cor <- mag_err_summ |>
-  dplyr::summarise(r = round(cor(true_val, abs_diff), 2), .by = metric)
-
-ggplot(mag_err_summ, aes(x = true_val, y = abs_diff)) +
-  geom_point(aes(colour = factor(yr)), size = 2.2, alpha = 0.8) +
-  geom_smooth(method = 'lm', se = FALSE, colour = 'black', linewidth = 0.6) +
-  geom_text(
-    data = mag_err_cor, aes(label = paste0('r = ', r)),
-    x = -Inf, y = Inf, hjust = -0.2, vjust = 1.5, inherit.aes = FALSE,
-    size = 3.3, fontface = 'bold'
-  ) +
-  facet_wrap(~ metric, scales = 'free', nrow = 1) +
-  scale_colour_viridis_d(name = 'Year') +
-  labs(x = 'Species true value that year (cm or shoots/m²)',
-       y = 'Mean absolute difference across\ngroups (cm or shoots/m²)') +
-  theme_bw(base_size = 11) +
-  theme(strip.background = element_rect(fill = '#004F7E'),
-        strip.text = element_text(colour = 'white', face = 'bold'))
-```
-
-For Short Shoot Density, disagreement climbs steeply with density (r = `r mag_err_cor$r[mag_err_cor$metric == 'Short Shoot Density']`): a bed with more shoots present gives groups more opportunity to disagree on the count, the same pattern seen in count data generally. Percent difference correctly cancels that out, so a year or species with a naturally denser bed isn't penalized just for being dense.
-
-The figure below confirms that the cancellation actually works: it repeats the same species/year points for Short Shoot Density, but with the y-axis switched to the percent (CV) difference actually used for scoring, instead of the raw shoots/m² difference shown above.
-
-```{r}
-#| label: fig-magnitude-error-cv
-#| fig-cap: "Mean absolute percent (CV) difference between groups vs. true value magnitude for Short Shoot Density, one point per species/year, across the full training record. Unlike the raw shoots/m² difference in the previous figure, this shows only a weak relationship with density, confirming the percent basis removes most of the scale effect rather than just relocating it."
-#| fig-height: 4
-#| fig-width: 6
-
-ssd_cv_summ <- mag_err_dat |>
-  dplyr::filter(metric == 'Short Shoot Density') |>
-  dplyr::summarise(
-    true_val    = mean(truval, na.rm = TRUE),
-    abs_pctdiff = mean(abs(aveperc), na.rm = TRUE),
-    .by = c(yr, Species)
-  ) |>
-  dplyr::filter(!is.na(true_val), !is.na(abs_pctdiff))
-
-ssd_cv_cor <- round(cor(ssd_cv_summ$true_val, ssd_cv_summ$abs_pctdiff), 2)
-
-ggplot(ssd_cv_summ, aes(x = true_val, y = abs_pctdiff)) +
-  geom_point(aes(colour = factor(yr)), size = 2.2, alpha = 0.8) +
-  geom_smooth(method = 'lm', se = FALSE, colour = 'black', linewidth = 0.6) +
-  annotate('text', x = -Inf, y = Inf, label = paste0('r = ', ssd_cv_cor),
-           hjust = -0.2, vjust = 1.5, size = 3.3, fontface = 'bold') +
-  scale_colour_viridis_d(name = 'Year') +
-  scale_y_continuous(labels = scales::percent) +
-  labs(x = 'Species true value that year (shoots/m²)',
-       y = 'Mean absolute percent difference\nacross groups') +
-  theme_bw(base_size = 11)
-```
-
-Short Shoot Density's percent difference shows a far weaker relationship with density (r = `r ssd_cv_cor`) than the strong one in raw units (r = `r mag_err_cor$r[mag_err_cor$metric == 'Short Shoot Density']`) above. The CV basis is doing most of what it's meant to: a dense bed and a sparse bed now contribute much more comparably to the score than they would in raw units. The residual negative trend is concentrated at the lowest true densities, a handful of species/year points below about 3 shoots/m², where a small true value in the denominator inflates the percent difference even for a modest raw miscount. That is a different, harder-to-eliminate artifact from the one motivating the move away from raw units in the first place, and worth keeping in mind when interpreting Short Shoot Density scores in years with especially sparse beds.
-
-For Blade Length, disagreement is essentially flat regardless of blade length (r = `r mag_err_cor$r[mag_err_cor$metric == 'Blade Length']`): however consistent, or not, groups are at measuring a 10 cm blade, they are about equally consistent measuring a 30 cm one. This is closer to a fixed measurement precision (e.g., where along a tapering or curled blade someone chooses to measure) than a process that scales with the plant. Dividing by the true value here would not remove a magnitude effect, it would manufacture one. That is exactly what produced 2020's oddly tight-looking Blade Length scores under an earlier version of this methodology that scored Blade Length on percent difference: that year happened to have unusually long blades, which mechanically shrank the percent differences even though the raw cm disagreement was unremarkable.
-
-Based on this, **Blade Length is scored on the raw cm difference** (`abs`) rather than percent difference, while **Short Shoot Density keeps the percent/CV basis** (`pct`). Abundance, already on a unitless ordinal scale, is unaffected either way.
 
 ```{r}
 #| label: tbl-sppdiff
@@ -516,25 +410,122 @@ S_abu <- nrow(spd_abu)
 raw_abu <- round(N_abu / S_abu, 3)
 ```
 
-To see how these combine into a raw metric score, consider the Abundance values for group `r ex_grp_label` in @tbl-sppdiff above. Taking the absolute values of the mean differences, the `r S_abu` species have $|\bar{d}_s|$ of `r paste(spd_abu$abs_dev, collapse = ', ')`. The raw Abundance score is their plain average:
+To see how these combine into a raw metric score, consider the abundance values for group `r ex_grp_label` in @tbl-sppdiff above. Taking the absolute values of the mean differences, the `r S_abu` species have $|\bar{d}_s|$ of `r paste(spd_abu$abs_dev, collapse = ', ')`. The raw abundance score is their plain average:
 
 $$\frac{1}{S}\sum_s|\bar{d}_s| = \frac{`r paste(spd_abu$abs_dev, collapse = ' + ')`}{`r S_abu`} = `r raw_abu`$$
 
-matching the Abundance value shown in the "Raw score" row of @tbl-example-scores in the full worked example below. This raw score is then scaled to a numeric score on a 0–100 scale using the range of scores across groups, which is then converted to a letter grade (see next steps).
+matching the abundance value shown in the "Raw score" row of @tbl-example-scores in the full worked example below. This raw score is then scaled to a numeric score on a 0–100 scale using the range of scores across groups, which is then converted to a letter grade (see next steps).
+
+### Absolute vs. percent difference
+
+$d_{s,t}$ is not defined the same way for every metric:
+
+- **Abundance** uses the raw difference in ordinal Braun-Blanquet category positions (as described in *Species Identification Penalties* above). These categories are already unitless and applied the same way to every species, so there is no reason to convert them to a percent basis.
+- **Blade Length** uses the raw difference in cm.
+- **Short Shoot Density** instead uses the symmetric percent difference (CV). This metric is measured in physical units (shoots/m²) where the typical magnitude varies a great deal by species (e.g., Halodule is characteristically much denser than Thalassia). The percent difference puts every species and every year on the same relative scale.  The reasoning for doing so is justified below.
+
+The weight $\sigma_{s,t}$ follows the same basis as $d_{s,t}$ for each metric:
+
+- **Abundance** and **Blade Length** use $\sigma_{s,t}$ directly, in raw units (category positions, cm).
+- **Short Shoot Density** instead uses $\sigma_{s,t}$'s **coefficient of variation**, dividing it by the true value at that transect, for the same reason $d_{s,t}$ does.
+
+When $\sigma_{s,t}$ cannot be computed (fewer than two groups reporting at that transect), the weight defaults to its neutral value, full weight ($w_{s,t}=1$), for every metric.
+
+For short shoot density, percent normalization is appropriate when the typical size of a measurement disagreement itself scales with the magnitude of the true value. If disagreement is instead roughly constant regardless of magnitude, dividing by the true value doesn't remove a scale effect, it creates one.  This is why abundance and blade length scores are based on absolute differences.
+
+The figure below demonstrates these differences by showing every species/year combination across the full training record for blade length (left) and short shoot density (right). The x-axis shows the "true" values for the year/species combination and the y-axis shows the mean absolute disagreement between groups.
+
+```{r}
+#| label: fig-magnitude-error
+#| fig-cap: "Mean absolute disagreement between groups vs. true value magnitude, one point per species/year, across the full training record. Short shoot density shows a strong positive relationship: disagreement grows with density, consistent with a count-like process, so dividing by the true value correctly removes that scale effect. Blade length shows essentially none, such that disagreement doesn't grow with blade length."
+#| fig-height: 4.5
+#| fig-width: 9.5
+
+all_yrs <- sort(unique(trndat$yr))
+
+mag_err_dat <- purrr::map(c('Blade Length', 'Short Shoot Density'), function(vr){
+  purrr::map(all_yrs, function(y){
+    tv   <- truvar_fun(trndat, y)
+    grps <- trndat |> dplyr::filter(yr == y) |> dplyr::pull(grpact) |> unique()
+    purrr::map(grps, function(g){
+      eg <- evalgrp_fun(trndat, y, g, tv)
+      sppdiff_fun(eg, vr) |> dplyr::mutate(grpact = g, yr = y, metric = vr)
+    }) |> dplyr::bind_rows()
+  }) |> dplyr::bind_rows()
+}) |> dplyr::bind_rows()
+
+mag_err_summ <- mag_err_dat |>
+  dplyr::summarise(
+    true_val = mean(truval, na.rm = TRUE),
+    abs_diff = mean(abs(avediff), na.rm = TRUE),
+    .by = c(metric, yr, Species)
+  ) |>
+  dplyr::filter(!is.na(true_val), !is.na(abs_diff))
+
+mag_err_cor <- mag_err_summ |>
+  dplyr::summarise(r = round(cor(true_val, abs_diff), 2), .by = metric)
+
+ggplot(mag_err_summ, aes(x = true_val, y = abs_diff)) +
+  geom_point(aes(colour = factor(yr)), size = 2.2, alpha = 0.8) +
+  geom_smooth(method = 'lm', se = FALSE, colour = 'black', linewidth = 0.6) +
+  geom_text(
+    data = mag_err_cor, aes(label = paste0('r = ', r)),
+    x = -Inf, y = Inf, hjust = -0.2, vjust = 1.5, inherit.aes = FALSE,
+    size = 3.3, fontface = 'bold'
+  ) +
+  facet_wrap(~ metric, scales = 'free', nrow = 1) +
+  scale_colour_viridis_d(name = 'Year') +
+  labs(x = 'Species true value that year (cm or shoots/m²)',
+       y = 'Mean absolute difference across\ngroups (cm or shoots/m²)') +
+  theme_bw(base_size = 11) +
+  theme(strip.background = element_rect(fill = '#004F7E'),
+        strip.text = element_text(colour = 'white', face = 'bold'))
+```
+
+For short shoot density, disagreement increases with higher density (r = `r mag_err_cor$r[mag_err_cor$metric == 'Short Shoot Density']`). Percent difference remove that effect, so a year or species with a naturally denser bed isn't penalized more just for being dense.
+
+The figure below confirms that the effect is removed for short shoot density. The y-axis is now shown as the percent (CV) difference actually used for scoring, instead of the raw shoots/m² difference shown above.
+
+```{r}
+#| label: fig-magnitude-error-cv
+#| fig-cap: "Mean absolute percent (CV) difference between groups vs. true value magnitude for short shoot density, one point per species/year, across the full training record. Unlike the raw shoots/m² difference in the previous figure, this shows only a weak relationship with density, confirming the percent basis removes most of the scale effect rather than just relocating it."
+#| fig-height: 4
+#| fig-width: 6
+
+ssd_cv_summ <- mag_err_dat |>
+  dplyr::filter(metric == 'Short Shoot Density') |>
+  dplyr::summarise(
+    true_val    = mean(truval, na.rm = TRUE),
+    abs_pctdiff = mean(abs(aveperc), na.rm = TRUE),
+    .by = c(yr, Species)
+  ) |>
+  dplyr::filter(!is.na(true_val), !is.na(abs_pctdiff))
+
+ssd_cv_cor <- round(cor(ssd_cv_summ$true_val, ssd_cv_summ$abs_pctdiff), 2)
+
+ggplot(ssd_cv_summ, aes(x = true_val, y = abs_pctdiff)) +
+  geom_point(aes(colour = factor(yr)), size = 2.2, alpha = 0.8) +
+  geom_smooth(method = 'lm', se = FALSE, colour = 'black', linewidth = 0.6) +
+  annotate('text', x = -Inf, y = Inf, label = paste0('r = ', ssd_cv_cor),
+           hjust = -0.2, vjust = 1.5, size = 3.3, fontface = 'bold') +
+  scale_colour_viridis_d(name = 'Year') +
+  scale_y_continuous(labels = scales::percent) +
+  labs(x = 'Species true value that year (shoots/m²)',
+       y = 'Mean absolute percent difference\nacross groups') +
+  theme_bw(base_size = 11)
+```
 
 ## Steps 8-9: Score Calibration
 
-Raw metric scores are converted to a 0–100 scale. Without calibration, the best group in any year always maps to 100 and the worst always maps to 50 (a fixed minimum score), regardless of how closely groups agreed. This means a year where everyone performed very well would still produce a spread from A to D, which needs to be accounted for to avoid an unfair outcome.
-
-To address this, the score floor (the minimum possible score) is raised in years when all groups agree closely with each other, and kept at 50 in years when disagreement is high.
+Raw metric scores for each of the three metrics are converted to a 0–100 scale, with a minimum value of 50 that can be increased depending how similarly groups scored within a year.  The floor can be increased so that groups generally receive better scores when they are more similar to each other.  It prevents any one group from receiving a very low score due to the rescaling even if all groups performed similar in a given year.
 
 ### How calibration works
 
-For each year and metric, we compute the within-year standard deviation of group differences to assess the spread between groups, using the same difference basis as the metric's score (percent difference for Short Shoot Density, cm difference for Blade Length, category-position difference for Abundance). This is then expressed as a ratio to the mean spread over a fixed baseline period, the first `r length(cal$cal_yrs)` years of training data (`r min(cal$cal_yrs)`-`r max(cal$cal_yrs)`). A ratio below 1 means groups agreed more closely than the baseline and a ratio above 1 means more disagreement than the baseline.
+For each year and metric, the within-year standard deviation of group differences is calculated to assess the spread between groups. Each year/metric spread is then compared to a "typical" spread to determine how similar or different the groups were for that year.  The typical spread is determined from a fixed baseline period, the first `r length(cal$cal_yrs)` years of training data (`r min(cal$cal_yrs)`-`r max(cal$cal_yrs)`). A ratio below 1 means groups agreed more closely than the baseline and a ratio above 1 means more disagreement than the baseline.
 
 The baseline period is fixed rather than recalculated from all years seen so far. If it were recalculated every year, adding a new season of data would shift the baseline and could retroactively change the calibrated score floor, and therefore the grade, on report cards already published for earlier years. Fixing the baseline keeps a given year's score floor stable once it's been set.
 
-Scoring Short Shoot Density on percent difference matters here in particular. It is measured in a physical unit whose typical scale varies by species and quadrat locations over the multi-year training record. Computing this spread on raw units would confuse a change in that scale with a genuine change in how closely groups agree, making some years look artificially tighter or looser than they really were. Percent difference keeps the year-to-year comparison on a consistent, scale-free basis. Blade Length is scored on raw cm differences instead, exactly because it does not have this problem (see *Why the difference basis differs by metric* above): its typical disagreement does not scale with blade length, so a percent basis there would introduce year-to-year scale drift rather than remove it.
+Scoring short shoot density on percent difference matters here in particular. It is measured in a physical unit whose typical scale varies by species and quadrat locations over the multi-year training record. Computing this spread on raw units would confuse a change in that scale with a genuine change in how closely groups agree, making some years look artificially tighter or looser than they really were. Percent difference keeps the year-to-year comparison on a consistent, scale-free basis. Blade length is scored on raw cm differences instead, exactly because it does not have this problem (see *Why the difference basis differs by metric* above): its typical disagreement does not scale with blade length, so a percent basis there would introduce year-to-year scale drift rather than remove it.
 
 The score floor for a given year and metric is:
 
@@ -548,7 +539,7 @@ Before reducing each year down to a single spread number, it helps to see the ra
 
 ```{r}
 #| label: fig-raw-boxplots
-#| fig-cap: "Distribution of raw (pre-rescale) group scores for each metric and year. Each point is one group; the boxplot summarizes the same within-year spread the standard deviations in the next figure are computed from. The shaded band marks the fixed baseline years used to compute the calibration mean. Units are category positions for Abundance, cm for Blade Length, and percent difference for Short Shoot Density, so boxes are only comparable within a panel, not across panels."
+#| fig-cap: "Distribution of raw (pre-rescale) group scores for each metric and year. Each point is one group; the boxplot summarizes the same within-year spread the standard deviations in the next figure are computed from. The shaded band marks the fixed baseline years used to compute the calibration mean. Units are category positions for abundance, cm for blade length, and percent difference for short shoot density, so boxes are only comparable within a panel, not across panels."
 #| fig-height: 5
 #| fig-width: 10
 
@@ -582,7 +573,7 @@ The next figure reduces each of those distributions down to a single within-year
 
 ```{r}
 #| label: fig-calibration
-#| fig-cap: "Within-year spread of group differences for each metric and year. Bar colour shows the ratio of each year's spread to the fixed baseline mean (dashed line). Bar labels show the ratio and the resulting score floor. Blue (ratio < 1) years are tighter than the baseline and receive a higher score floor. The shaded band marks the fixed baseline years used to compute that mean. Spread is in category-position units for Abundance, cm for Blade Length, and percent-difference units for Short Shoot Density, so bar heights are only comparable within a panel, not across panels."
+#| fig-cap: "Within-year spread of group differences for each metric and year. Bar colour shows the ratio of each year's spread to the fixed baseline mean (dashed line). Bar labels show the ratio and the resulting score floor. Blue (ratio < 1) years are tighter than the baseline and receive a higher score floor. The shaded band marks the fixed baseline years used to compute that mean. Spread is in category-position units for abundance, cm for blade length, and percent-difference units for short shoot density, so bar heights are only comparable within a panel, not across panels."
 #| fig-height: 5
 #| fig-width: 10
 
@@ -693,7 +684,7 @@ tibble::tibble(
   )
 ```
 
-The Total score is the unweighted average of the Abundance, Blade Length, and Short Shoot Density numeric scores, then converted to a letter grade using the same thresholds.
+The Total score is the unweighted average of the abundance, blade length, and short shoot density numeric scores, then converted to a letter grade using the same thresholds.
 
 ## Worked Example
 
@@ -709,11 +700,11 @@ The example below applies the general workflow from the Overview (steps 1-10) to
 
 ### Raw differences
 
-The table below shows the raw data behind everything that follows: each row is one transect (site) and seagrass species, with the group's reported value, the cross-group true value, and the difference between them for each metric (a percent difference for Short Shoot Density, a cm difference for Blade Length, a category-position difference for Abundance). The Diff column is already discounted by the transect-level weight $w_{s,t}$ from Steps 3-7 (a transect where groups had more trouble agreeing with each other counts for less). The "Average" row for each species is a true weighted average of the transect-level values above it (the sum of Diff $\times$ $w_{s,t}$ divided by the sum of $w_{s,t}$), the same quantity used in scoring (Steps 3-7), so it is **not** a plain average of the Diff column shown here, nor is it what you'd get by averaging the Reported and True columns down to a single number and then subtracting, which is why those two columns are left blank on the Average row. The illustration below works through both points, and the weight itself, for one species.
+The table below shows the raw data behind everything that follows: each row is one transect (site) and seagrass species, with the group's reported value, the cross-group true value, and the difference between them for each metric (a percent difference for short shoot density, a cm difference for blade length, a category-position difference for abundance). The Diff column is already discounted by the transect-level weight $w_{s,t}$ from Steps 3-7 (a transect where groups had more trouble agreeing with each other counts for less). The "Average" row for each species is a true weighted average of the transect-level values above it (the sum of Diff $\times$ $w_{s,t}$ divided by the sum of $w_{s,t}$), the same quantity used in scoring (Steps 3-7), so it is **not** a plain average of the Diff column shown here, nor is it what you'd get by averaging the Reported and True columns down to a single number and then subtracting, which is why those two columns are left blank on the Average row. The illustration below works through both points, and the weight itself, for one species.
 
 ```{r}
 #| label: tbl-example-evalgrp
-#| tbl-cap: !expr paste0("Per-transect reported vs. true values and differences for group ", ex_grp_label, " in ", ex_yr, ", for every species used in scoring (seagrass for all three metrics, macroalgae for Abundance only, which is why their Blade Length and Short Shoot Density columns are blank). Diff is already weighted by how much groups agreed with each other at that transect for that species and metric (Steps 3-7). The Average row per species is a true weighted average of the Diff values (not a plain average), and is not derived from the Reported/True columns (left blank there).")
+#| tbl-cap: !expr paste0("Per-transect reported vs. true values and differences for group ", ex_grp_label, " in ", ex_yr, ", for every species used in scoring (seagrass for all three metrics, macroalgae for abundance only, which is why their blade length and short shoot density columns are blank). Diff is already weighted by how much groups agreed with each other at that transect for that species and metric (Steps 3-7). The Average row per species is a true weighted average of the Diff values (not a plain average), and is not derived from the Reported/True columns (left blank there).")
 
 vars_ord <- c('Abundance', 'Blade Length', 'Short Shoot Density')
 
@@ -822,7 +813,7 @@ dplyr::bind_rows(pertrn, avgrows) |>
 # concrete rather than a coincidental wash. Restricted to metrics actually
 # scored on percent difference, this divergence (average-of-ratios vs.
 # ratio-of-averages) is a property of the percent transform and doesn't
-# arise for a metric scored on a plain (linear) difference like Blade Length
+# arise for a metric scored on a plain (linear) difference like blade length
 pct_metrics <- names(scr_metric)[scr_metric == 'pct' & names(scr_metric) != 'Abundance']
 illus_dat <- purrr::map(pct_metrics, function(vr){
   evalgrp |>
@@ -912,7 +903,7 @@ For each metric, the mean absolute difference per species ($|\bar{d}_s|$) is lis
 
 ```{r}
 #| label: tbl-example-scores
-#| tbl-cap: !expr paste0("Score derivation for group ", ex_grp_label, " in ", ex_yr, ". The 'Species |d̅s|' row lists each species' mean absolute difference from Steps 3-7 in one comma-separated cell. The 'Raw score' row shows the average of those values and its conversion to a calibrated numeric score and letter grade via the score floor. |d̅s| is a percent difference (fraction) for Short Shoot Density, a cm difference for Blade Length, and a category-position difference for Abundance.")
+#| tbl-cap: !expr paste0("Score derivation for group ", ex_grp_label, " in ", ex_yr, ". The 'Species |d̅s|' row lists each species' mean absolute difference from Steps 3-7 in one comma-separated cell. The 'Raw score' row shows the average of those values and its conversion to a calibrated numeric score and letter grade via the score floor. |d̅s| is a percent difference (fraction) for short shoot density, a cm difference for blade length, and a category-position difference for abundance.")
 
 metrics_ord <- c('Abundance', 'Blade Length', 'Short Shoot Density')
 
@@ -1018,7 +1009,7 @@ score_tbl |>
   ) |>
   gt::cols_align('center', columns = c(raw_score, floor_adj, numeric_score, grade)) |>
   gt::tab_source_note(
-    source_note = gt::html('The Raw score row is the plain average of |d̅<sub>s</sub>| across species. |d̅<sub>s</sub>| is a percent difference for Short Shoot Density, a cm difference for Blade Length, and a category-position difference for Abundance, already discounted at the transect level for cross-group disagreement (Steps 3-7).')
+    source_note = gt::html('The Raw score row is the plain average of |d̅<sub>s</sub>| across species. |d̅<sub>s</sub>| is a percent difference for short shoot density, a cm difference for blade length, and a category-position difference for abundance, already discounted at the transect level for cross-group disagreement (Steps 3-7).')
   ) |>
   gt::tab_options(
     table.border.top.color = '#2166ac',
@@ -1102,7 +1093,7 @@ ggplot(plot_dat, aes(x = raw_score, y = numeric_score)) +
   scale_y_continuous(breaks = seq(50, 100, 10), expand = expansion(mult = c(0.1, 0.05))) +
   scale_x_continuous(expand = expansion(mult = c(0.05, 0.35))) +
   facet_wrap(~ metric, scales = 'free_x', nrow = 1) +
-  labs(x = 'Raw score (average absolute difference across species, cm for Blade Length, % difference for Short Shoot Density)', y = 'Numeric score') +
+  labs(x = 'Raw score (average absolute difference across species, cm for blade length, % difference for short shoot density)', y = 'Numeric score') +
   theme_bw(base_size = 10) +
   theme(
     strip.background = element_rect(fill = '#004F7E'),
