@@ -86,8 +86,8 @@ The full scoring workflow, from raw field data to a final letter grade, is:
 5. Apply the transect-level weight from step 3 to each transect's difference from step 4, discounting differences at transects where groups disagreed a lot.
 6. Combine the weighted per-transect differences from step 5 across transects into one difference value per species/metric, using a true weighted average (weighted by the same transect-level weight from step 3, not a plain average), so a transect with a larger weight counts for more.
 7. Roll up species into a raw metric score as the plain average of those per-species differences.
-8. Establish the typical spread of raw metric scores between groups within each year, using a fixed baseline period of `r length(cal$cal_yrs)` years (`r min(cal$cal_yrs)`-`r max(cal$cal_yrs)`), this is the baseline every year (including years in the baseline itself) that is compared against to judge whether a focal year was unusually tight or loose.
-9. Calibrate the score floor for that year and metric based on how tight or loose the cohort was that year relative to the typical spread from step 8, then rescale the raw score to a 0-100 numeric score.
+8. Establish the typical spread of raw metric scores between groups within each year, using a fixed baseline period of `r length(cal$cal_yrs)` years (`r min(cal$cal_yrs)`-`r max(cal$cal_yrs)`). This is the baseline that every year (including years in the baseline itself) is compared against to judge whether a focal year was unusually tight or loose.
+9. Calibrate the score floor for that year and metric based on how tight or loose the cohort was that year relative to the typical spread from step 8, then rescale the raw score to a 0–100 numeric score.
 10. Get the overall Total score as the plain average of the three metrics' numeric scores, then convert every numeric score, per-metric and Total, to a letter grade using fixed thresholds.
 
 The steps are connected as shown below in the diagram.
@@ -98,7 +98,7 @@ The sections below work through each of these ten steps in detail. A full worked
 
 ## Step 1: The Consensus Species List
 
-Not every species recorded across all groups counts toward scoring. A species at a given transect (site/quadrat) is considered present if at least two distinct groups reported it with non-zero abundance. This removes likely misidentifications while still being inclusive, i.e., a species does not need to be unanimous, just corroborated.  False positives (found by the current group but not found by any other groups) or true negatives (found by at least two other groups but not the current group) are considered in the abundance metric calculations. Species identifications include seagrass and macroalgae. Both are scored on abundance, but only seagrass is used to assess blade length and short shoot density.
+Not every species recorded across all groups counts toward scoring. A species at a given transect (site/quadrat) is considered present if at least two distinct groups reported it with non-zero abundance. This removes likely misidentifications while still being inclusive, i.e., a species does not need to be unanimous, just corroborated.  False positives (found by the current group but not found by any other groups) or false negatives (found by at least two other groups but not the current group) are considered in the abundance metric calculations. Species identifications include seagrass and macroalgae. Both are scored on abundance, but only seagrass is used to assess blade length and short shoot density.
 
 ```{r}
 #| label: tbl-truespp
@@ -178,13 +178,13 @@ truvar |>
 
 ## Steps 3-7: Group Differences and Metric Scores
 
-For each metric (abundance, blade length, short shoot density), a group's reported values are compared to the true values, species by species and transect by transect, then rolled into a single score per group per metric. Species misidentifications (false positive or true negative) are evaluated first before rollup, since they change what counts as a difference from the true values.
+For each metric (abundance, blade length, short shoot density), a group's reported values are compared to the true values, species by species and transect by transect, then rolled into a single score per group per metric. Species misidentifications (false positive or false negative) are evaluated first before rollup, since they change what counts as a difference from the true values.
 
 ### Species Identification Penalties
 
 Comparing a group's reported values to the true values across all consensus species and transects reveals two types of species identification errors:
 
-**True negatives (missed species)**: a species is present but the group did not record it. The group's abundance for that species is treated as "no coverage" (BB value 0) when computing the difference. The penalty scales with the true abundance of the missed species, such that missing a rare species is a small error, while missing a dominant one is a large error.
+**False negatives (missed species)**: a species is present but the group did not record it. The group's abundance for that species is treated as "no coverage" (BB value 0) when computing the difference. The penalty scales with the true abundance of the missed species, such that missing a rare species is a small error, while missing a dominant one is a large error.
 
 **False positives**: the group recorded a species that is not on the consensus list (i.e., no other group confirmed it). The true abundance is treated as "no coverage" (BB value 0), but unlike a missed species, the penalty is a fixed one category difference from zero. What category a group happens to report for a species nobody else saw is not evidence about whether the species was really there, so the penalty does not scale with the reported abundance.
 
@@ -483,7 +483,7 @@ ggplot(mag_err_summ, aes(x = true_val, y = abs_diff)) +
         legend.position = 'bottom')
 ```
 
-For short shoot density, disagreement increases with higher density (r = `r mag_err_cor$r[mag_err_cor$metric == 'Short Shoot Density']`). Percent difference remove that effect, so a year or species with a naturally denser bed isn't penalized more just for being dense.
+For short shoot density, disagreement increases with higher density (r = `r mag_err_cor$r[mag_err_cor$metric == 'Short Shoot Density']`). Percent difference removes that effect, so a year or species with a naturally denser bed isn't penalised more just for being dense.
 
 The figure below confirms that the effect is removed for short shoot density. The y-axis is now shown as the percent (CV) difference actually used for scoring, instead of the raw shoots/m² difference shown above.
 
@@ -536,7 +536,7 @@ The figure below shows every group's raw (before rescale) metric score, one poin
 
 ```{r}
 #| label: fig-raw-boxplots
-#| fig-cap: 'Distribution of raw group scores for each metric and year. Each point is one group and the values in each year/metric are used to estimate the the standard deviations in the next figure. The shaded band marks the fixed baseline years used to compute the calibration mean (i.e., mean standard deviation for across the years used for defining "typical spread"). Units are category positions for abundance, cm for blade length, and percent difference for short shoot density, so boxes are only comparable within a panel.'
+#| fig-cap: 'Distribution of raw group scores for each metric and year. Each point is one group and the values in each year/metric are used to estimate the standard deviations in the next figure. The shaded band marks the fixed baseline years used to compute the calibration mean (i.e., mean standard deviation for across the years used for defining "typical spread"). Units are category positions for abundance, cm for blade length, and percent difference for short shoot density, so boxes are only comparable within a panel.'
 #| fig-height: 5
 #| fig-width: 10
 
@@ -566,7 +566,7 @@ ggplot(raw_by_yr, aes(x = factor(yr), y = raw_diff)) +
         strip.text = element_text(colour = 'white', face = 'bold'))
 ```
 
-The next figure showws those distributions as the standard deviation for the year, compared to the mean standard deviation for the baseline period (dashed line).  Years when the ratio of the the standard deviation to the baseline mean standard deviation are less than 1 have a raised minimum score (i.e., groups had more similar scores), whereas years when the ratio is at or exceeds 1 receive the default floor of 50. 
+The next figure shows those distributions as the standard deviation for the year, compared to the mean standard deviation for the baseline period (dashed line).  Years when the ratio of the standard deviation to the baseline mean standard deviation are less than 1 have a raised minimum score (i.e., groups had more similar scores), whereas years when the ratio is at least 1 receive the default floor of 50.
 
 ```{r}
 #| label: fig-calibration
@@ -655,7 +655,7 @@ yr_spreads |>
 
 ## Step 10: Letter Grades
 
-After calibration, each group's numeric score for each metric falls on a conventional 0–100 scale, with the lowest possible score in a given year defined by the calibrated score floor. Note that it is impossible for a score to fall below the floor, whereas the scale is described nominally as a 0-100 scale to correspond to a recognizable scoring scheme. These are mapped to letter grades using fixed thresholds:
+After calibration, each group's numeric score for each metric falls on a conventional 0–100 scale, with the lowest possible score in a given year defined by the calibrated score floor. The 0–100 label is nominal only to correspond to a recognizable scoring scheme. In practice a score can never fall below that year's floor. These are mapped to letter grades using fixed thresholds:
 
 ```{r}
 #| label: tbl-grades
@@ -695,7 +695,7 @@ The example below applies the general workflow from above to group `r ex_grp_lab
 
 ### Raw differences
 
-The table below shows the raw data used for scoring.  Each row is one transect (site) and species (macroalgae or seagrass), with the group's reported value, the cross-group true value, and the weighted difference between them for each metric (a percent difference for short shoot density, a cm difference for blade length, a category-position difference for abundance). The weighted difference column is already discounted by the transect-level weight $w_{s,t}$ and not simply the difference between reported and true (unless the weight is 1). Likewise, the "Average" row below each species is a true weighted average of the transect-level values above it (the sum of the weighted diffdrences divided by the weights).  An example for one species using the weights follows this table.
+The table below shows the raw data used for scoring.  Each row is one transect (site) and species (macroalgae or seagrass), with the group's reported value, the cross-group true value, and the weighted difference between them for each metric (a percent difference for short shoot density, a cm difference for blade length, a category-position difference for abundance). The weighted difference column is already discounted by the transect-level weight $w_{s,t}$ and not simply the difference between reported and true (unless the weight is 1). Likewise, the "Average" row below each species is a true weighted average of the transect-level values above it (the sum of the weighted differences divided by the weights).  An example for one species using the weights follows this table.
 
 ```{r}
 #| label: tbl-example-evalgrp
@@ -891,7 +891,7 @@ illus_rows |>
   )
 ```
 
-Averaging the raw "Percent difference" column above gives `r sprintf('%.0f', illus_summ$avg_of_pct[1] * 100)`%, which is not what is used for the species average metric difference ($d_s$). The average difference is based on the weighted differences and the weights, estimated as a true weighted average.  This is done by summing the weighted differences (`r round(illus_summ$num_wt[1], 2)`) and then dividing by the weights (`r round(illus_summ$sum_wt[1], 2)`), yielding `r sprintf('%.0f', illus_summ$wavg_of_pct[1] * 100)`%, matching the Average row for *`r illus_spp`*'s `r tolower(illus_metric)` in @tbl-example-evalgrp above.
+Averaging the raw "Percent difference" column above gives `r sprintf('%.0f', illus_summ$avg_of_pct[1] * 100)`%, which is not what is used for the species average metric difference ($\bar{d}_s$). The average difference is based on the weighted differences and the weights, estimated as a true weighted average.  This is done by summing the weighted differences (`r round(illus_summ$num_wt[1], 2)`) and then dividing by the weights (`r round(illus_summ$sum_wt[1], 2)`), yielding `r sprintf('%.0f', illus_summ$wavg_of_pct[1] * 100)`%, matching the Average row for *`r illus_spp`*'s `r tolower(illus_metric)` in @tbl-example-evalgrp above.
 
 ### Scores
 
