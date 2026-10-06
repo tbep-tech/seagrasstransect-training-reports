@@ -443,16 +443,13 @@ The figure below demonstrates these differences by showing every species/year co
 
 all_yrs <- sort(unique(trndat$yr))
 
-mag_err_dat <- purrr::map(c('Abundance', 'Blade Length', 'Short Shoot Density'), function(vr){
-  purrr::map(all_yrs, function(y){
-    tv   <- truvar_fun(trndat, y)
-    grps <- trndat |> dplyr::filter(yr == y) |> dplyr::pull(grpact) |> unique()
-    purrr::map(grps, function(g){
-      eg <- evalgrp_fun(trndat, y, g, tv)
-      sppdiff_fun(eg, vr) |> dplyr::mutate(grpact = g, yr = y, metric = vr)
-    }) |> dplyr::bind_rows()
-  }) |> dplyr::bind_rows()
-}) |> dplyr::bind_rows()
+mag_err_dat <- purrr::map(all_yrs, function(y){
+  tv <- truvar_fun(trndat, y)
+  allgrpscr_fun(trndat, y, tv, spp_diff = TRUE, metric = scr_metric) |>
+    dplyr::mutate(yr = y)
+}) |>
+  dplyr::bind_rows() |>
+  dplyr::rename(metric = var)
 
 mag_err_summ <- mag_err_dat |>
   dplyr::summarize(
@@ -740,13 +737,17 @@ for(vr in vars_ord){
   pertrn[[paste(vr, 'diff')]]     <- metcols[[vr]]$dif
 }
 
-# species-level average row per metric, using the same sppdiff_fun values
-# (and the same paired-transect calculation) used to compute the actual score
+# species-level average row per metric, using the same weighted-mean
+# deviations (and the same paired-transect calculation) used to compute the
+# actual score
+sppdiffall <- allgrpscr_fun(trndat, ex_yr, truvar, spp_diff = TRUE, metric = scr_metric) |>
+  dplyr::filter(grpact == ex_grp)
+
 avgrows <- purrr::map(sort(unique(base_dat$Species)), function(sp){
   row <- list(Species = sp, Transect = 'Average', sort_key = Inf)
   for(vr in vars_ord){
-    sd <- sppdiff_fun(evalgrp, vr) |> dplyr::filter(Species == sp)
-    devval <- if(nrow(sd) == 0) NA else if(scr_metric[[vr]] == 'pct') sd$aveperc[1] else sd$avediff[1]
+    sd <- sppdiffall |> dplyr::filter(var == vr, Species == sp)
+    devval <- if(nrow(sd) == 0) NA else sd$devval[1]
     row[[paste(vr, 'reported')]] <- '—'
     row[[paste(vr, 'true')]]     <- '—'
     row[[paste(vr, 'diff')]] <- if(is.na(devval)){
@@ -783,7 +784,7 @@ dplyr::bind_rows(pertrn, avgrows) |>
   ) |>
   gt::text_transform(
     locations = gt::cells_body(columns = Transect, rows = Transect == 'Average'),
-    fn = function(x) vapply(x, function(v) paste0(v, ' (d̅<sub>s</sub>)'), character(1), USE.NAMES = FALSE)
+    fn = function(x) vapply(x, function(v) paste0(v, ' (d<sub>s</sub>)'), character(1), USE.NAMES = FALSE)
   ) |>
   gt::cols_align('left') |>
   gt::tab_style(
@@ -917,12 +918,13 @@ ex_floors <- yr_spreads |>
 # metric (rather than one row per species): every other column is blank on a
 # per-species row, so spelling them out one row at a time was mostly
 # whitespace next to the handful of summary values that actually differ
+sppdiffall <- allgrpscr_fun(trndat, ex_yr, truvar, spp_diff = TRUE, metric = scr_metric) |>
+  dplyr::filter(grpact == ex_grp)
+
 spp_combined <- purrr::map(metrics_ord, function(vr){
-  lbl <- sppdiff_fun(evalgrp, vr) |>
-    dplyr::mutate(
-      devval  = if(scr_metric[[vr]] == 'pct') aveperc else avediff,
-      abs_dev = round(abs(devval), 2)
-    ) |>
+  lbl <- sppdiffall |>
+    dplyr::filter(var == vr) |>
+    dplyr::mutate(abs_dev = round(abs(devval), 2)) |>
     dplyr::mutate(lbl = paste0('*', Species, '*', ' (', abs_dev, ')')) |>
     dplyr::pull(lbl) |>
     paste(collapse = ', ')

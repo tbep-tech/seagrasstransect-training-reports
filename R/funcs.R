@@ -908,6 +908,12 @@ calibrate_scr_fun <- function(trndat, metric = c(Abundance = 'abs', `Blade Lengt
 #' @param truvar data frame "true" values from training data for a given year
 #' @param raw logical, return raw scores, otherwise letter grades
 #' @param raw_diff logical, return pre-rescale weighted-mean deviations
+#' @param spp_diff logical, return per-species weighted-mean deviations
+#'   (\code{aveval}/\code{truval}/\code{avediff}/\code{aveperc}/\code{devval},
+#'   one row per group, metric, and species) instead of the group-level
+#'   metric score. Takes precedence over \code{raw}/\code{raw_diff}/\code{cal},
+#'   none of which apply at the species level (rescaling and letter grades
+#'   are only defined per group)
 #' @param cal named list of per-metric calibration constants from \code{\link{calibrate_scr_fun}}
 #' @param k numeric, maximum floor lift in grade-points when all groups agree perfectly (default 50, giving a floor of 100)
 #' @param metric named character vector giving the deviation basis to use per
@@ -924,7 +930,7 @@ calibrate_scr_fun <- function(trndat, metric = c(Abundance = 'abs', `Blade Lengt
 #'   sample-size noise plus the true value's own spatial pattern, not a
 #'   reliable signal about the group, so it was dropped rather than kept as
 #'   an unreliable weight
-allgrpscr_fun <- function(trndat, yr, truvar, raw = F, raw_diff = FALSE, cal = NULL, k = 50,
+allgrpscr_fun <- function(trndat, yr, truvar, raw = F, raw_diff = FALSE, spp_diff = FALSE, cal = NULL, k = 50,
                            metric = c(Abundance = 'abs', `Blade Length` = 'abs', `Short Shoot Density` = 'pct')){
 
   varnms <- c('Abundance', 'Blade Length', 'Short Shoot Density')
@@ -934,7 +940,7 @@ allgrpscr_fun <- function(trndat, yr, truvar, raw = F, raw_diff = FALSE, cal = N
   stopifnot("metric must be 'abs' or 'pct' for each of Abundance, Blade Length, Short Shoot Density" =
               all(metric %in% c('abs', 'pct')))
 
-  scrs <- trndat |>
+  grpevals <- trndat |>
     dplyr::filter(yr == !!yr) |>
     dplyr::select(grpact) |>
     dplyr::distinct() |>
@@ -942,7 +948,28 @@ allgrpscr_fun <- function(trndat, yr, truvar, raw = F, raw_diff = FALSE, cal = N
     dplyr::mutate(
       evalgrp = purrr::map2(grpact, evalgrp, ~ evalgrp_fun(trndat, yr, .x, truvar))
     ) |>
-    tidyr::crossing(var = varnms) |>
+    tidyr::crossing(var = varnms)
+
+  # species-level weighted-mean deviations, the same per-species avediff/
+  # aveperc sppdiff_fun returns, before they get collapsed into a single
+  # group/metric score below. Returned as-is, bypassing raw/cal/grades, since
+  # rescaling and letter grades are only meaningful at the group level
+  if(spp_diff){
+    out <- grpevals |>
+      dplyr::mutate(
+        sppdat = purrr::map2(evalgrp, var, function(evalgrp, var){
+          sppdiff_fun(evalgrp, var) |>
+            dplyr::mutate(devval = if(metric[[var]] == 'pct') aveperc else avediff) |>
+            dplyr::select(Species, aveval, truval, avediff, aveperc, devval)
+        })
+      ) |>
+      dplyr::select(-evalgrp) |>
+      tidyr::unnest(sppdat)
+
+    return(out)
+  }
+
+  scrs <- grpevals |>
     dplyr::mutate(
       avediff = purrr::pmap(list(evalgrp, var), function(evalgrp, var){
         sppdiff_fun(evalgrp, var) |>
