@@ -433,17 +433,17 @@ When $\sigma_{s,t}$ cannot be computed (fewer than two groups reporting at that 
 
 For short shoot density, percent normalization is appropriate when the typical size of a measurement disagreement itself scales with the magnitude of the true value. If disagreement is instead roughly constant regardless of magnitude, dividing by the true value doesn't remove a scale effect, it creates one.  This is why abundance and blade length scores are based on absolute differences.
 
-The figure below demonstrates these differences by showing every species/year combination across the full training record for blade length (left) and short shoot density (right). The x-axis shows the "true" values for the year/species combination and the y-axis shows the mean absolute disagreement between groups.
+The figure below demonstrates these differences by showing every species/year combination across the full training record for abundance (left), blade length (middle), and short shoot density (right). The x-axis shows the "true" values for the year/species combination and the y-axis shows the mean absolute disagreement between groups.
 
 ```{r}
 #| label: fig-magnitude-error
-#| fig-cap: "Mean absolute disagreement between groups vs. true value magnitude, one point per species/year, across the full training record. Short shoot density shows a strong positive relationship: disagreement grows with density, consistent with a count-like process, so dividing by the true value correctly removes that scale effect. Blade length shows essentially none, such that disagreement doesn't grow with blade length."
+#| fig-cap: "Mean absolute disagreement between groups vs. true value magnitude, one point per species/year, across the full training record. Short shoot density shows a strong positive relationship where disagreement grows with density. Abundance and blade length show no comparable positive relationship."
 #| fig-height: 4.5
 #| fig-width: 9.5
 
 all_yrs <- sort(unique(trndat$yr))
 
-mag_err_dat <- purrr::map(c('Blade Length', 'Short Shoot Density'), function(vr){
+mag_err_dat <- purrr::map(c('Abundance', 'Blade Length', 'Short Shoot Density'), function(vr){
   purrr::map(all_yrs, function(y){
     tv   <- truvar_fun(trndat, y)
     grps <- trndat |> dplyr::filter(yr == y) |> dplyr::pull(grpact) |> unique()
@@ -475,11 +475,12 @@ ggplot(mag_err_summ, aes(x = true_val, y = abs_diff)) +
   ) +
   facet_wrap(~ metric, scales = 'free', nrow = 1) +
   scale_colour_viridis_d(name = 'Year') +
-  labs(x = 'Species true value that year (cm or shoots/m²)',
-       y = 'Mean absolute difference across\ngroups (cm or shoots/m²)') +
+  labs(x = 'Species true value that year (category, cm, or shoots/m²)',
+       y = 'Mean absolute difference across\ngroups (category, cm, or shoots/m²)') +
   theme_bw(base_size = 11) +
   theme(strip.background = element_rect(fill = '#004F7E'),
-        strip.text = element_text(colour = 'white', face = 'bold'))
+        strip.text = element_text(colour = 'white', face = 'bold'),
+        legend.position = 'bottom')
 ```
 
 For short shoot density, disagreement increases with higher density (r = `r mag_err_cor$r[mag_err_cor$metric == 'Short Shoot Density']`). Percent difference remove that effect, so a year or species with a naturally denser bed isn't penalized more just for being dense.
@@ -488,7 +489,7 @@ The figure below confirms that the effect is removed for short shoot density. Th
 
 ```{r}
 #| label: fig-magnitude-error-cv
-#| fig-cap: "Mean absolute percent (CV) difference between groups vs. true value magnitude for short shoot density, one point per species/year, across the full training record. Unlike the raw shoots/m² difference in the previous figure, this shows only a weak relationship with density, confirming the percent basis removes most of the scale effect rather than just relocating it."
+#| fig-cap: "Mean absolute percent (CV) difference between groups vs. true value magnitude for short shoot density, one point per species/year, across the full training record. Unlike the raw shoots/m² difference in the previous figure, this shows only a weak relationship with density, confirming the percent basis removes most of the scale effect."
 #| fig-height: 4
 #| fig-width: 6
 
@@ -517,29 +518,25 @@ ggplot(ssd_cv_summ, aes(x = true_val, y = abs_pctdiff)) +
 
 ## Steps 8-9: Score Calibration
 
-Raw metric scores for each of the three metrics are converted to a 0–100 scale, with a minimum value of 50 that can be increased depending how similarly groups scored within a year.  The floor can be increased so that groups generally receive better scores when they are more similar to each other.  It prevents any one group from receiving a very low score due to the rescaling even if all groups performed similar in a given year.
+Raw metric scores for each of the three metrics are converted to a 0–100 scale, with a minimum value of 50 that can be increased so that groups can receive better scores when they are more similar to each other.  It prevents any one group from receiving a very low score due to the rescaling even if all groups performed similarly in a given year.
 
 ### How calibration works
 
-For each year and metric, the within-year standard deviation of group differences is calculated to assess the spread between groups. Each year/metric spread is then compared to a "typical" spread to determine how similar or different the groups were for that year.  The typical spread is determined from a fixed baseline period, the first `r length(cal$cal_yrs)` years of training data (`r min(cal$cal_yrs)`-`r max(cal$cal_yrs)`). A ratio below 1 means groups agreed more closely than the baseline and a ratio above 1 means more disagreement than the baseline.
-
-The baseline period is fixed rather than recalculated from all years seen so far. If it were recalculated every year, adding a new season of data would shift the baseline and could retroactively change the calibrated score floor, and therefore the grade, on report cards already published for earlier years. Fixing the baseline keeps a given year's score floor stable once it's been set.
-
-Scoring short shoot density on percent difference matters here in particular. It is measured in a physical unit whose typical scale varies by species and quadrat locations over the multi-year training record. Computing this spread on raw units would confuse a change in that scale with a genuine change in how closely groups agree, making some years look artificially tighter or looser than they really were. Percent difference keeps the year-to-year comparison on a consistent, scale-free basis. Blade length is scored on raw cm differences instead, exactly because it does not have this problem (see *Why the difference basis differs by metric* above): its typical disagreement does not scale with blade length, so a percent basis there would introduce year-to-year scale drift rather than remove it.
+For each year and metric, the within-year standard deviation of group differences is calculated to assess the spread between groups. Each year/metric spread is then compared to a "typical" spread to determine how similar or different the groups were for that year.  The typical spread is determined from a fixed baseline period calculated using the first `r length(cal$cal_yrs)` years of training data (`r min(cal$cal_yrs)`-`r max(cal$cal_yrs)`). 
 
 The score floor for a given year and metric is:
 
 $$
-\text{floor}_{\text{year}} = \max\!\left(50,\ 50 + \left(1 - \frac{\text{SD}_{\text{year}}}{\overline{\text{SD}}}\right) \times 50\right)
+\text{floor}_{\text{yr, met}} = \max\!\left(50,\ 50 + \left(1 - \frac{\text{SD}_{\text{yr, met}}}{\overline{\text{SD_{met}}}}\right) \times 50\right)
 $$
 
-where $\text{SD}_{\text{year}}$ is the within-year spread for that metric and year, $\overline{\text{SD}}$ is the baseline mean described above, and 50 is a scaling constant that sets the maximum possible floor lift (grade-points). The scaling constant is a subjective choice. Larger values compress scores toward each other in tight years, while smaller values preserve more spread. The maximum lift occurs when all groups agree perfectly (ratio = 0), giving a floor of $50 + 50 = 100$, which corresponds to a minimum grade of A (all groups performed exactly the same). A year at the baseline average (ratio = 1) receives no adjustment and keeps a floor of 50. Loose years (ratio > 1) are capped at 50 so that no extra penalty is applied beyond the standard range.
+where $\text{SD}_{\text{yr, met}}$ is the within-year spread for that metric and year, $\overline{\text{SD_{met}}}$ is the baseline mean standard deviation for the metric described above, and 50 is a scaling constant that sets the maximum possible floor lift (grade-points). The scaling constant is a subjective choice and, in this case, using a value of 50 means that the floor can be raised a total of 50 points for years when groups score similarly.  That is, the maximum lift occurs when all groups agree perfectly setting the ratio to 0, giving a floor of $50 + 50 = 100$, which corresponds to a minimum grade of A. Years when the standard deviation exceeds the baseline value are capped at 50 so that no extra penalty is applied.
 
-Before reducing each year down to a single spread number, it helps to see the raw distribution that number comes from. The figure below shows every group's raw (pre-rescale) metric score, one point per group, for every training year.
+The figure below shows every group's raw (before rescale) metric score, one point per group for every training year, to demonstrate the general spread of scores from which the standard deviations are calculated.  
 
 ```{r}
 #| label: fig-raw-boxplots
-#| fig-cap: "Distribution of raw (pre-rescale) group scores for each metric and year. Each point is one group; the boxplot summarizes the same within-year spread the standard deviations in the next figure are computed from. The shaded band marks the fixed baseline years used to compute the calibration mean. Units are category positions for abundance, cm for blade length, and percent difference for short shoot density, so boxes are only comparable within a panel, not across panels."
+#| fig-cap: 'Distribution of raw group scores for each metric and year. Each point is one group and the values in each year/metric are used to estimate the the standard deviations in the next figure. The shaded band marks the fixed baseline years used to compute the calibration mean (i.e., mean standard deviation for across the years used for defining "typical spread"). Units are category positions for abundance, cm for blade length, and percent difference for short shoot density, so boxes are only comparable within a panel.'
 #| fig-height: 5
 #| fig-width: 10
 
@@ -569,11 +566,11 @@ ggplot(raw_by_yr, aes(x = factor(yr), y = raw_diff)) +
         strip.text = element_text(colour = 'white', face = 'bold'))
 ```
 
-The next figure reduces each of those distributions down to a single within-year standard deviation and compares it to the fixed baseline mean (dashed line).
+The next figure showws those distributions as the standard deviation for the year, compared to the mean standard deviation for the baseline period (dashed line).  Years when the ratio of the the standard deviation to the baseline mean standard deviation are less than 1 have a raised minimum score (i.e., groups had more similar scores), whereas years when the ratio is at or exceeds 1 receive the default floor of 50. 
 
 ```{r}
 #| label: fig-calibration
-#| fig-cap: "Within-year spread of group differences for each metric and year. Bar colour shows the ratio of each year's spread to the fixed baseline mean (dashed line). Bar labels show the ratio and the resulting score floor. Blue (ratio < 1) years are tighter than the baseline and receive a higher score floor. The shaded band marks the fixed baseline years used to compute that mean. Spread is in category-position units for abundance, cm for blade length, and percent-difference units for short shoot density, so bar heights are only comparable within a panel, not across panels."
+#| fig-cap: "Within-year spread of group differences for each metric and year. Bar colour shows the ratio of each year's spread to the fixed baseline mean (dashed line). Bar labels show the ratio and the resulting score floor. Blue (ratio < 1) years are tighter than the baseline and receive a higher score floor. The shaded band marks the fixed baseline years used to compute that mean. Spread is in category-position units for abundance, cm for blade length, and percent-difference units for short shoot density, so bar heights are only comparable within a panel."
 #| fig-height: 5
 #| fig-width: 10
 
@@ -624,9 +621,7 @@ ggplot(yr_spreads, aes(x = factor(yr), y = sd_avediff, fill = ratio)) +
         strip.text = element_text(colour = 'white', face = 'bold'))
 ```
 
-### Effect on scores: tight vs. loose year
-
-The table below compares the calibrated score floor for each year and metric, illustrating how the floor shifts in tighter training years.
+The table below shows the final score floors for each year and metric.  These are the same values in the labels above the barplots in the previous figure.
 
 ```{r}
 #| label: tbl-floors
@@ -640,7 +635,7 @@ yr_spreads |>
   gt::data_color(
     columns = c(Abundance, `Blade Length`, `Short Shoot Density`),
     fn = scales::col_numeric(
-      palette = c('#c6dbef', '#c7e9c0'),
+      palette = c('#b2d5f7', '#00441b'),
       domain = c(50, 100)
     )
   ) |>
@@ -660,7 +655,7 @@ yr_spreads |>
 
 ## Step 10: Letter Grades
 
-After calibration, each group's numeric score for each metric falls on a 0–100 scale, with the lowest possible score in a given year defined by the calibrated score floor. These are mapped to letter grades using fixed thresholds:
+After calibration, each group's numeric score for each metric falls on a conventional 0–100 scale, with the lowest possible score in a given year defined by the calibrated score floor. Note that it is impossible for a score to fall below the floor, whereas the scale is described nominally as a 0-100 scale to correspond to a recognizable scoring scheme. These are mapped to letter grades using fixed thresholds:
 
 ```{r}
 #| label: tbl-grades
@@ -700,7 +695,7 @@ The example below applies the general workflow from the Overview (steps 1-10) to
 
 ### Raw differences
 
-The table below shows the raw data behind everything that follows: each row is one transect (site) and seagrass species, with the group's reported value, the cross-group true value, and the difference between them for each metric (a percent difference for short shoot density, a cm difference for blade length, a category-position difference for abundance). The Diff column is already discounted by the transect-level weight $w_{s,t}$ from Steps 3-7 (a transect where groups had more trouble agreeing with each other counts for less). The "Average" row for each species is a true weighted average of the transect-level values above it (the sum of Diff $\times$ $w_{s,t}$ divided by the sum of $w_{s,t}$), the same quantity used in scoring (Steps 3-7), so it is **not** a plain average of the Diff column shown here, nor is it what you'd get by averaging the Reported and True columns down to a single number and then subtracting, which is why those two columns are left blank on the Average row. The illustration below works through both points, and the weight itself, for one species.
+The table below shows the raw data used for scoring.  Each row is one transect (site) and seagrass species, with the group's reported value, the cross-group true value, and the difference between them for each metric (a percent difference for short shoot density, a cm difference for blade length, a category-position difference for abundance). The Diff column is already discounted by the transect-level weight $w_{s,t}$ from Steps 3-7 (a transect where groups had more trouble agreeing with each other counts for less). The "Average" row for each species is a true weighted average of the transect-level values above it (the sum of Diff $\times$ $w_{s,t}$ divided by the sum of $w_{s,t}$), the same quantity used in scoring (Steps 3-7), so it is **not** a plain average of the Diff column shown here, nor is it what you'd get by averaging the Reported and True columns down to a single number and then subtracting, which is why those two columns are left blank on the Average row. The illustration below works through both points, and the weight itself, for one species.
 
 ```{r}
 #| label: tbl-example-evalgrp
