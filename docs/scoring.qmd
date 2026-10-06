@@ -188,7 +188,7 @@ Comparing a group's reported values to the true values across all consensus spec
 
 **False positives**: the group recorded a species that is not on the consensus list (i.e., no other group confirmed it). The true abundance is treated as "no coverage" (BB value 0), but unlike a missed species, the penalty is a fixed one category difference from zero. What category a group happens to report for a species nobody else saw is not evidence about whether the species was really there, so the penalty does not scale with the reported abundance.
 
-These penalties only affect the abundance score. Blade length and short shoot density cannot be meaningfully penalised for species that were not found.
+These penalties only affect the abundance score. Blade length and short shoot density cannot be meaningfully penalized for species that were not found.
 
 For abundance, the difference is computed as a gap in ordinal category positions rather than in raw Braun-Blanquet numeric values. The eight BB categories are treated as equally spaced steps (1 = no coverage through 8 = 76–100%), so a difference of 1 means the group was one category apart from the true value, regardless of the numeric gap between those categories on the BB scale.  This implicitly assumes that there is similar difficulty in distinguishing between lower abundances (e.g., solitary vs few) and higher abundances (e.g., 51-75% vs 76-100%).
 
@@ -343,7 +343,7 @@ Now the same group is far off at the easy transect but close at the hard one.
 
 ```{r}
 #| label: tbl-scenario2
-#| tbl-cap: "Scenario 2: a large difference falls on the easy transect. The weighted average (blue) is higher than the unweighted average (red), appropriately penalising a large miss on a transect where all groups should have agreed."
+#| tbl-cap: "Scenario 2: a large difference falls on the easy transect. The weighted average (blue) is higher than the unweighted average (red), appropriately penalizing a large miss on a transect where all groups should have agreed."
 make_transect_scenario_tbl(
   label   = c('Transect A (easy, σ = 0)', 'Transect B (hard, σ = 3)'),
   sigma   = c(0, 3),
@@ -455,7 +455,7 @@ mag_err_dat <- purrr::map(c('Abundance', 'Blade Length', 'Short Shoot Density'),
 }) |> dplyr::bind_rows()
 
 mag_err_summ <- mag_err_dat |>
-  dplyr::summarise(
+  dplyr::summarize(
     true_val = mean(truval, na.rm = TRUE),
     abs_diff = mean(abs(avediff), na.rm = TRUE),
     .by = c(metric, yr, Species)
@@ -463,27 +463,27 @@ mag_err_summ <- mag_err_dat |>
   dplyr::filter(!is.na(true_val), !is.na(abs_diff))
 
 mag_err_cor <- mag_err_summ |>
-  dplyr::summarise(r = round(cor(true_val, abs_diff), 2), .by = metric)
+  dplyr::summarize(r = round(cor(true_val, abs_diff), 2), .by = metric)
 
 ggplot(mag_err_summ, aes(x = true_val, y = abs_diff)) +
-  geom_point(aes(colour = factor(yr)), size = 2.2, alpha = 0.8) +
-  geom_smooth(method = 'lm', se = FALSE, colour = 'black', linewidth = 0.6) +
+  geom_point(aes(color = factor(yr)), size = 2.2, alpha = 0.8) +
+  geom_smooth(method = 'lm', se = FALSE, color = 'black', linewidth = 0.6) +
   geom_text(
     data = mag_err_cor, aes(label = paste0('r = ', r)),
     x = -Inf, y = Inf, hjust = -0.2, vjust = 1.5, inherit.aes = FALSE,
     size = 3.3, fontface = 'bold'
   ) +
   facet_wrap(~ metric, scales = 'free', nrow = 1) +
-  scale_colour_viridis_d(name = 'Year') +
+  scale_color_viridis_d(name = 'Year') +
   labs(x = 'Species true value that year (category, cm, or shoots/m²)',
        y = 'Mean absolute difference across\ngroups (category, cm, or shoots/m²)') +
   theme_bw(base_size = 11) +
   theme(strip.background = element_rect(fill = '#004F7E'),
-        strip.text = element_text(colour = 'white', face = 'bold'),
+        strip.text = element_text(color = 'white', face = 'bold'),
         legend.position = 'bottom')
 ```
 
-For short shoot density, disagreement increases with higher density (r = `r mag_err_cor$r[mag_err_cor$metric == 'Short Shoot Density']`). Percent difference removes that effect, so a year or species with a naturally denser bed isn't penalised more just for being dense.
+For short shoot density, disagreement increases with higher density (r = `r mag_err_cor$r[mag_err_cor$metric == 'Short Shoot Density']`). Percent difference removes that effect, so a year or species with a naturally denser bed isn't penalized more just for being dense.
 
 The figure below confirms that the effect is removed for short shoot density. The y-axis is now shown as the percent (CV) difference actually used for scoring, instead of the raw shoots/m² difference shown above.
 
@@ -495,7 +495,7 @@ The figure below confirms that the effect is removed for short shoot density. Th
 
 ssd_cv_summ <- mag_err_dat |>
   dplyr::filter(metric == 'Short Shoot Density') |>
-  dplyr::summarise(
+  dplyr::summarize(
     true_val    = mean(truval, na.rm = TRUE),
     abs_pctdiff = mean(abs(aveperc), na.rm = TRUE),
     .by = c(yr, Species)
@@ -505,11 +505,11 @@ ssd_cv_summ <- mag_err_dat |>
 ssd_cv_cor <- round(cor(ssd_cv_summ$true_val, ssd_cv_summ$abs_pctdiff), 2)
 
 ggplot(ssd_cv_summ, aes(x = true_val, y = abs_pctdiff)) +
-  geom_point(aes(colour = factor(yr)), size = 2.2, alpha = 0.8) +
-  geom_smooth(method = 'lm', se = FALSE, colour = 'black', linewidth = 0.6) +
+  geom_point(aes(color = factor(yr)), size = 2.2, alpha = 0.8) +
+  geom_smooth(method = 'lm', se = FALSE, color = 'black', linewidth = 0.6) +
   annotate('text', x = -Inf, y = Inf, label = paste0('r = ', ssd_cv_cor),
            hjust = -0.2, vjust = 1.5, size = 3.3, fontface = 'bold') +
-  scale_colour_viridis_d(name = 'Year') +
+  scale_color_viridis_d(name = 'Year') +
   scale_y_continuous(labels = scales::percent) +
   labs(x = 'Species true value that year (shoots/m²)',
        y = 'Mean absolute percent difference\nacross groups') +
@@ -556,21 +556,21 @@ cal_band <- tibble::tibble(xmin = 0.5, xmax = length(cal$cal_yrs) + 0.5)
 ggplot(raw_by_yr, aes(x = factor(yr), y = raw_diff)) +
   geom_rect(data = cal_band, aes(xmin = xmin, xmax = xmax, ymin = -Inf, ymax = Inf),
             inherit.aes = FALSE, fill = '#958984', alpha = 0.15) +
-  geom_boxplot(outlier.shape = NA, fill = '#eef4fb', colour = '#2166ac', width = 0.6) +
-  geom_jitter(width = 0.12, height = 0, alpha = 0.7, colour = '#004F7E', size = 1.8) +
+  geom_boxplot(outlier.shape = NA, fill = '#eef4fb', color = '#2166ac', width = 0.6) +
+  geom_jitter(width = 0.12, height = 0, alpha = 0.7, color = '#004F7E', size = 1.8) +
   facet_wrap(~ metric, scales = 'free_y', nrow = 1) +
   labs(x = NULL, y = 'Raw (pre-rescale)\ngroup score') +
   theme_bw(base_size = 10) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1),
         strip.background = element_rect(fill = '#004F7E'),
-        strip.text = element_text(colour = 'white', face = 'bold'))
+        strip.text = element_text(color = 'white', face = 'bold'))
 ```
 
 The next figure shows those distributions as the standard deviation for the year, compared to the mean standard deviation for the baseline period (dashed line).  Years when the ratio of the standard deviation to the baseline mean standard deviation are less than 1 have a raised minimum score (i.e., groups had more similar scores), whereas years when the ratio is at least 1 receive the default floor of 50.
 
 ```{r}
 #| label: fig-calibration
-#| fig-cap: "Within-year spread of group differences for each metric and year. Bar colour shows the ratio of each year's spread to the fixed baseline mean (dashed line). Bar labels show the ratio and the resulting score floor. Blue (ratio < 1) years are tighter than the baseline and receive a higher score floor. The shaded band marks the fixed baseline years used to compute that mean. Spread is in category-position units for abundance, cm for blade length, and percent-difference units for short shoot density, so bar heights are only comparable within a panel."
+#| fig-cap: "Within-year spread of group differences for each metric and year. Bar color shows the ratio of each year's spread to the fixed baseline mean (dashed line). Bar labels show the ratio and the resulting score floor. Blue (ratio < 1) years are tighter than the baseline and receive a higher score floor. The shaded band marks the fixed baseline years used to compute that mean. Spread is in category-position units for abundance, cm for blade length, and percent-difference units for short shoot density, so bar heights are only comparable within a panel."
 #| fig-height: 5
 #| fig-width: 10
 
@@ -585,7 +585,7 @@ cal_lkp <- tibble::tibble(
 yr_spreads <- purrr::map(yrs, function(yr){
   tv <- truvar_fun(trndat, yr)
   allgrpscr_fun(trndat, yr, tv, raw_diff = TRUE, metric = scr_metric) |>
-    dplyr::summarise(dplyr::across(Abundance:`Short Shoot Density`,
+    dplyr::summarize(dplyr::across(Abundance:`Short Shoot Density`,
                                    ~ sd(.x, na.rm = TRUE))) |>
     dplyr::mutate(yr = yr)
 }) |>
@@ -605,7 +605,7 @@ cal_band <- tibble::tibble(
 ggplot(yr_spreads, aes(x = factor(yr), y = sd_avediff, fill = ratio)) +
   geom_rect(data = cal_band, aes(xmin = xmin, xmax = xmax, ymin = -Inf, ymax = Inf),
             inherit.aes = FALSE, fill = '#958984', alpha = 0.15) +
-  geom_col(width = 0.7, colour = 'grey40', linewidth = 0.3) +
+  geom_col(width = 0.7, color = 'gray40', linewidth = 0.3) +
   geom_hline(aes(yintercept = mean_sd), linetype = 'dashed', linewidth = 0.6) +
   geom_text(aes(label = sprintf('ratio %.2f\nfloor %d', ratio, floor_adj)),
             vjust = -0.25, size = 2.3, lineheight = 0.9) +
@@ -618,7 +618,7 @@ ggplot(yr_spreads, aes(x = factor(yr), y = sd_avediff, fill = ratio)) +
   theme(legend.position = 'bottom',
         axis.text.x = element_text(angle = 45, hjust = 1),
         strip.background = element_rect(fill = '#004F7E'),
-        strip.text = element_text(colour = 'white', face = 'bold'))
+        strip.text = element_text(color = 'white', face = 'bold'))
 ```
 
 The table below shows the final score floors for each year and metric.  These are the same values in the labels above the barplots in the previous figure.
@@ -834,7 +834,7 @@ illus_dat <- purrr::map(pct_metrics, function(vr){
   )
 
 illus_summ <- illus_dat |>
-  dplyr::summarise(
+  dplyr::summarize(
     n = dplyr::n(),
     pct_of_avg   = ifelse(mean(truval) == 0, NA, (mean(aveval) - mean(truval)) / ((mean(aveval) + mean(truval)) / 2)),
     avg_of_pct   = mean(perpct, na.rm = TRUE),
@@ -1014,11 +1014,11 @@ score_tbl |>
   )
 ```
 
-The figure below shows how raw scores map to numeric scores across all groups for each metric. The grey line is the linear rescaling anchored at 100 for the best group and at the score floor for the worst. Group `r ex_grp_label` is highlighted in blue.
+The figure below shows how raw scores map to numeric scores across all groups for each metric. The gray line is the linear rescaling anchored at 100 for the best group and at the score floor for the worst. Group `r ex_grp_label` is highlighted in blue.
 
 ```{r}
 #| label: fig-rescale
-#| fig-cap: !expr paste0("Raw score to numeric score rescaling for all groups in ", ex_yr, " by metric. Each dot is one group and group ", ex_grp_label, " (blue) is highlighted with drop lines to both axes. The grey line is the linear mapping from the best group (lowest raw difference, numeric score 100) to the worst (highest raw difference, score floor). The red dashed line shows the calibrated score floor.")
+#| fig-cap: !expr paste0("Raw score to numeric score rescaling for all groups in ", ex_yr, " by metric. Each dot is one group and group ", ex_grp_label, " (blue) is highlighted with drop lines to both axes. The gray line is the linear mapping from the best group (lowest raw difference, numeric score 100) to the worst (highest raw difference, score floor). The red dashed line shows the calibrated score floor.")
 #| fig-height: 4
 #| fig-width: 9.5
 
@@ -1043,7 +1043,7 @@ plot_dat <- dplyr::left_join(all_rawd_long, all_num_long, by = c('grpact', 'metr
 
 line_dat <- plot_dat |>
   dplyr::group_by(metric) |>
-  dplyr::summarise(
+  dplyr::summarize(
     x_lo = min(raw_score),
     x_hi = max(raw_score),
     floor_adj = dplyr::first(floor_adj),
@@ -1056,35 +1056,35 @@ ggplot(plot_dat, aes(x = raw_score, y = numeric_score)) +
   geom_hline(
     data = line_dat,
     aes(yintercept = floor_adj),
-    colour = '#d73027', linetype = 'dashed', linewidth = 0.5
+    color = '#d73027', linetype = 'dashed', linewidth = 0.5
   ) +
   geom_segment(
     data = line_dat,
     aes(x = x_lo, xend = x_hi, y = 100, yend = floor_adj),
-    colour = 'grey50', linewidth = 0.8
+    color = 'gray50', linewidth = 0.8
   ) +
   geom_segment(
     data = ex_dat,
     aes(x = raw_score, xend = raw_score, y = numeric_score, yend = -Inf),
-    colour = '#2166ac', linetype = 'dotted', linewidth = 0.6
+    color = '#2166ac', linetype = 'dotted', linewidth = 0.6
   ) +
   geom_segment(
     data = ex_dat,
     aes(x = -Inf, xend = raw_score, y = numeric_score, yend = numeric_score),
-    colour = '#2166ac', linetype = 'dotted', linewidth = 0.6
+    color = '#2166ac', linetype = 'dotted', linewidth = 0.6
   ) +
-  geom_point(data = plot_dat |> dplyr::filter(!is_example), colour = 'grey60', size = 3) +
-  geom_point(data = ex_dat, colour = '#2166ac', size = 4) +
+  geom_point(data = plot_dat |> dplyr::filter(!is_example), color = 'gray60', size = 3) +
+  geom_point(data = ex_dat, color = '#2166ac', size = 4) +
   geom_label(
     data = ex_dat,
     aes(label = paste0('raw = ', round(raw_score, 3), '\nscore = ', round(numeric_score, 1))),
-    hjust = -0.1, size = 2.8, colour = '#2166ac', fill = 'white',
+    hjust = -0.1, size = 2.8, color = '#2166ac', fill = 'white',
     label.size = 0.3, label.padding = unit(0.2, 'lines')
   ) +
   geom_text(
     data = line_dat,
     aes(x = x_hi, y = floor_adj, label = paste0('floor = ', floor_adj)),
-    hjust = 1, vjust = -0.5, size = 2.5, colour = '#d73027'
+    hjust = 1, vjust = -0.5, size = 2.5, color = '#d73027'
   ) +
   scale_y_continuous(breaks = seq(50, 100, 10), expand = expansion(mult = c(0.1, 0.05))) +
   scale_x_continuous(expand = expansion(mult = c(0.05, 0.35))) +
@@ -1093,7 +1093,7 @@ ggplot(plot_dat, aes(x = raw_score, y = numeric_score)) +
   theme_bw(base_size = 10) +
   theme(
     strip.background = element_rect(fill = '#004F7E'),
-    strip.text = element_text(colour = 'white', face = 'bold')
+    strip.text = element_text(color = 'white', face = 'bold')
   )
 ```
 
